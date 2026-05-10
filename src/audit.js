@@ -1,4 +1,5 @@
 import fs from "node:fs/promises";
+import crypto from "node:crypto";
 import path from "node:path";
 import { applyBaseline, loadBaselineFile } from "./baseline.js";
 import { displayPath } from "./fingerprint.js";
@@ -44,12 +45,6 @@ export async function writeAuditPack({
 
   await fs.mkdir(resolvedOutputDir, { recursive: true });
 
-  const manifest = buildAuditManifest(result, files, {
-    cwd,
-    outputDir: resolvedOutputDir,
-    failOn
-  });
-
   await Promise.all([
     fs.writeFile(files.executiveSummary, generateExecutiveSummary(result, { failOn }), "utf8"),
     fs.writeFile(files.remediation, generateRemediationPlan(result), "utf8"),
@@ -59,6 +54,14 @@ export async function writeAuditPack({
     fs.writeFile(files.jsonReport, `${generateJsonReport(result)}\n`, "utf8"),
     fs.writeFile(files.sarifReport, `${generateSarifReport(result)}\n`, "utf8")
   ]);
+
+  const artifacts = await auditArtifacts(files, cwd);
+  const manifest = buildAuditManifest(result, files, {
+    cwd,
+    outputDir: resolvedOutputDir,
+    failOn,
+    artifacts
+  });
   await fs.writeFile(files.manifest, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
 
   return {
@@ -246,7 +249,7 @@ function generateRemediationChecklist(result) {
   return `${lines.join("\n")}\n`;
 }
 
-function buildAuditManifest(result, files, { cwd, outputDir, failOn }) {
+function buildAuditManifest(result, files, { cwd, outputDir, failOn, artifacts }) {
   return {
     version: 1,
     tool: {
@@ -268,8 +271,27 @@ function buildAuditManifest(result, files, { cwd, outputDir, failOn }) {
     baseline: result.baseline || { enabled: false },
     files: Object.fromEntries(
       Object.entries(files).map(([key, filePath]) => [key, displayPath(filePath, cwd)])
-    )
+    ),
+    integrity: {
+      algorithm: "sha256",
+      artifacts
+    }
   };
+}
+
+async function auditArtifacts(files, cwd) {
+  const artifacts = [];
+  for (const [key, filePath] of Object.entries(files)) {
+    if (key === "manifest") continue;
+    const content = await fs.readFile(filePath);
+    artifacts.push({
+      key,
+      path: displayPath(filePath, cwd),
+      bytes: content.byteLength,
+      sha256: crypto.createHash("sha256").update(content).digest("hex")
+    });
+  }
+  return artifacts;
 }
 
 function decisionGuidance(result) {
