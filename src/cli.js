@@ -5,9 +5,10 @@ import { applyBaseline, loadBaselineFile, writeBaselineFile } from "./baseline.j
 import { initProject, renderInitSummary } from "./init.js";
 import { scan } from "./scan.js";
 import { generateHtmlReport, generateJsonReport, generateMarkdownReport, generateSarifReport, generateTextReport } from "./report.js";
+import { generateRulesJson, generateRulesMarkdown, generateRulesText } from "./rule-catalog.js";
 import { compareSeverity, severityRank } from "./severity.js";
 
-const VERSION = "0.4.8";
+const VERSION = "0.4.9";
 
 export async function runCli(argv, io) {
   const args = argv.slice(2);
@@ -20,6 +21,17 @@ export async function runCli(argv, io) {
 
   if (command === "version" || command === "--version" || command === "-v") {
     io.stdout.write(`${VERSION}\n`);
+    return 0;
+  }
+
+  if (command === "rules") {
+    if (args.includes("--help") || args.includes("-h")) {
+      io.stdout.write(helpText());
+      return 0;
+    }
+
+    const options = parseRulesArgs(args.slice(1));
+    io.stdout.write(renderRules(options.format));
     return 0;
   }
 
@@ -372,6 +384,27 @@ function parseVerifyAuditArgs(args, defaultCwd) {
   return options;
 }
 
+function parseRulesArgs(args) {
+  const options = {
+    format: "text"
+  };
+
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (arg === "--format" || arg === "-f") {
+      options.format = readValue(args, index, arg);
+      index += 1;
+      if (!["text", "markdown", "json"].includes(options.format)) {
+        throw new Error("--format must be one of: text, markdown, json");
+      }
+    } else {
+      throw new Error(`Unknown rules option: ${arg}`);
+    }
+  }
+
+  return options;
+}
+
 function readValue(args, index, optionName) {
   const value = args[index + 1];
   if (!value || value.startsWith("--")) {
@@ -400,6 +433,16 @@ function renderReport(result, format) {
   return generateTextReport(result);
 }
 
+function renderRules(format) {
+  if (format === "json") {
+    return generateRulesJson();
+  }
+  if (format === "markdown") {
+    return generateRulesMarkdown();
+  }
+  return generateRulesText();
+}
+
 function shouldFail(result, failOn) {
   const threshold = severityRank(failOn);
   return result.findings.some((finding) => compareSeverity(finding.severity, threshold) >= 0);
@@ -414,6 +457,7 @@ Usage:
   mcp-guard scan [options]
   mcp-guard audit [options]
   mcp-guard verify-audit [options]
+  mcp-guard rules [options]
   mcp-guard init [options]
   mcp-guard version
   mcp-guard help
@@ -469,10 +513,14 @@ Verify audit options:
                             Default: mcp-guard-audit/mcp-guard-audit-manifest.json.
       --cwd <path>          Working directory for resolving relative artifact paths.
 
+Rules options:
+  -f, --format <format>     text, markdown, or json. Default: text.
+
 Examples:
   mcp-guard init
   mcp-guard init --write-baseline --upload-sarif
   mcp-guard scan
+  mcp-guard rules --format markdown
   mcp-guard audit --config .mcp.json --output-dir mcp-guard-audit
   mcp-guard verify-audit --manifest mcp-guard-audit/mcp-guard-audit-manifest.json
   mcp-guard audit --config .mcp.json --policy .mcp-guard-policy.json --fail-on high
