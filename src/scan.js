@@ -3,12 +3,14 @@ import path from "node:path";
 import { extractServers, loadConfigFile } from "./config.js";
 import { discoverConfigFiles } from "./discovery.js";
 import { findingFingerprint } from "./fingerprint.js";
+import { loadPolicy, policyForReport } from "./policy.js";
 import { evaluateServer } from "./rules.js";
 import { sortFindings } from "./severity.js";
 import { summarize } from "./baseline.js";
 
-export async function scan({ cwd, env, configPaths = [], includeDefaults = true, toolVersion = "0.0.0" }) {
+export async function scan({ cwd, env, configPaths = [], includeDefaults = true, policyPath = "", includePolicy = true, toolVersion = "0.0.0" }) {
   const home = env.HOME || env.USERPROFILE || os.homedir();
+  const policy = await loadPolicy({ cwd, home, policyPath, includePolicy });
   const explicitPaths = configPaths.map((item) => path.resolve(item));
   const shouldDiscover = explicitPaths.length === 0 && includeDefaults;
   const discoveredPaths = shouldDiscover ? await discoverConfigFiles({ cwd, env }) : [];
@@ -63,7 +65,7 @@ export async function scan({ cwd, env, configPaths = [], includeDefaults = true,
   }
 
   for (const server of servers) {
-    findings.push(...evaluateServer(server, { cwd, home }));
+    findings.push(...evaluateServer(server, { cwd, home, policy }));
   }
 
   const sortedFindings = sortFindings(findings).map((finding) => ({
@@ -76,8 +78,11 @@ export async function scan({ cwd, env, configPaths = [], includeDefaults = true,
       generatedAt: new Date().toISOString(),
       cwd,
       home,
+      policyPath: policy?.path || "",
+      policyEnabled: Boolean(policy),
       toolVersion
     },
+    policy: policyForReport(policy),
     scannedFiles,
     servers,
     findings: sortedFindings,

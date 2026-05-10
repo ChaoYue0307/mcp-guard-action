@@ -6,7 +6,7 @@ import { scan } from "./scan.js";
 import { generateHtmlReport, generateJsonReport, generateMarkdownReport, generateSarifReport, generateTextReport } from "./report.js";
 import { compareSeverity, severityRank } from "./severity.js";
 
-const VERSION = "0.4.3";
+const VERSION = "0.4.4";
 
 export async function runCli(argv, io) {
   const args = argv.slice(2);
@@ -36,6 +36,7 @@ export async function runCli(argv, io) {
       includeDefaults: options.includeDefaults,
       workflowPath: options.workflowPath,
       baselinePath: options.baselinePath,
+      policyPath: options.policyPath,
       failOn: options.failOn,
       commentPr: options.commentPr,
       uploadSarif: options.uploadSarif,
@@ -68,6 +69,8 @@ export async function runCli(argv, io) {
     env: io.env,
     configPaths: options.configPaths,
     includeDefaults: options.includeDefaults,
+    policyPath: options.policyPath,
+    includePolicy: options.includePolicy,
     toolVersion: VERSION
   });
 
@@ -106,6 +109,7 @@ function parseInitArgs(args, defaultCwd) {
     includeDefaults: true,
     workflowPath: "",
     baselinePath: "",
+    policyPath: "",
     failOn: "high",
     commentPr: true,
     uploadSarif: false,
@@ -119,6 +123,7 @@ function parseInitArgs(args, defaultCwd) {
   options.baselinePath = path.join(options.cwd, ".mcp-guard-baseline.json");
   let workflowPathProvided = false;
   let baselinePathProvided = false;
+  let policyPathProvided = false;
 
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
@@ -133,6 +138,10 @@ function parseInitArgs(args, defaultCwd) {
       options.baselinePath = resolveInputPath(readValue(args, index, arg), options.cwd);
       options.useBaseline = true;
       baselinePathProvided = true;
+      index += 1;
+    } else if (arg === "--policy") {
+      options.policyPath = resolveInputPath(readValue(args, index, arg), options.cwd);
+      policyPathProvided = true;
       index += 1;
     } else if (arg === "--write-baseline" || arg === "--write-allowlist") {
       options.writeBaseline = true;
@@ -160,6 +169,9 @@ function parseInitArgs(args, defaultCwd) {
       if (!baselinePathProvided) {
         options.baselinePath = path.join(options.cwd, ".mcp-guard-baseline.json");
       }
+      if (!policyPathProvided && options.policyPath) {
+        options.policyPath = path.join(options.cwd, ".mcp-guard-policy.json");
+      }
       index += 1;
     } else if (arg === "--no-defaults") {
       options.includeDefaults = false;
@@ -185,6 +197,8 @@ function parseScanArgs(args, defaultCwd) {
     failOn: "none",
     baselinePath: "",
     writeBaselinePath: "",
+    policyPath: "",
+    includePolicy: true,
     baselineReason: "Accepted current MCP findings"
   };
 
@@ -217,9 +231,14 @@ function parseScanArgs(args, defaultCwd) {
     } else if (arg === "--baseline-reason") {
       options.baselineReason = readValue(args, index, arg);
       index += 1;
+    } else if (arg === "--policy") {
+      options.policyPath = resolveInputPath(readValue(args, index, arg), options.cwd);
+      index += 1;
     } else if (arg === "--cwd") {
       options.cwd = path.resolve(readValue(args, index, arg));
       index += 1;
+    } else if (arg === "--no-policy") {
+      options.includePolicy = false;
     } else if (arg === "--no-defaults") {
       options.includeDefaults = false;
     } else {
@@ -279,6 +298,7 @@ Init options:
   -c, --config <path>       MCP config path to reference in the workflow. Can be repeated for baseline generation.
       --fail-on <severity>  Workflow fail threshold. Default: high.
       --baseline <path>     Reference an existing baseline JSON file in the workflow.
+      --policy <path>       Reference an MCP guard policy file in the workflow.
       --write-baseline      Generate a baseline from current findings and reference it in the workflow.
       --baseline-reason <text>
                             Reason stored for newly written baseline entries.
@@ -301,7 +321,10 @@ Scan options:
                             Write current findings to a baseline JSON file.
       --baseline-reason <text>
                             Reason stored for newly written baseline entries.
+      --policy <path>       Enforce an explicit policy file.
+                            Default: auto-load .mcp-guard-policy.json when present.
       --cwd <path>          Working directory for project config discovery.
+      --no-policy           Do not auto-load .mcp-guard-policy.json.
       --no-defaults         Only scan paths passed with --config.
 
 Examples:
@@ -312,6 +335,7 @@ Examples:
   mcp-guard scan --format html --output mcp-guard-report.html
   mcp-guard scan --format sarif --output mcp-guard.sarif
   mcp-guard scan --config .mcp.json --fail-on high
+  mcp-guard scan --config .mcp.json --policy .mcp-guard-policy.json --fail-on high
   mcp-guard scan --config .mcp.json --write-baseline .mcp-guard-baseline.json
   mcp-guard scan --config .mcp.json --baseline .mcp-guard-baseline.json --fail-on high
 `;

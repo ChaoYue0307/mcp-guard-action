@@ -23,7 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: ChaoYue0307/mcp-guard-action@v0.4.3
+      - uses: ChaoYue0307/mcp-guard-action@v0.4.4
         with:
           config: .mcp.json
           fail-on: high
@@ -42,7 +42,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: ChaoYue0307/mcp-guard-action@v0.4.3
+      - uses: ChaoYue0307/mcp-guard-action@v0.4.4
         with:
           config: .mcp.json
           fail-on: high
@@ -56,6 +56,7 @@ jobs:
 | `config` | empty | Optional MCP config path. Empty scans default project and user config locations. |
 | `fail-on` | `high` | Fails the job for `critical`, `high`, `medium`, or `low` findings. Use `none` for report-only mode. |
 | `baseline` | empty | Optional baseline/allowlist JSON path. Matching findings are accepted and do not fail the workflow. |
+| `policy` | empty | Optional policy JSON path. Empty auto-loads `.mcp-guard-policy.json` when present. |
 | `comment-pr` | `false` | Posts or updates a pull request comment with the scan summary. Requires `pull-requests: write`. |
 | `output-dir` | `mcp-guard-report` | Directory for generated reports. |
 | `upload-artifact` | `true` | Uploads generated reports as a workflow artifact. |
@@ -95,10 +96,22 @@ mcp-guard scan --config .mcp.json --write-baseline .mcp-guard-baseline.json
 Then enforce only new findings:
 
 ```yaml
-- uses: ChaoYue0307/mcp-guard-action@v0.4.3
+- uses: ChaoYue0307/mcp-guard-action@v0.4.4
   with:
     config: .mcp.json
     baseline: .mcp-guard-baseline.json
+    fail-on: high
+```
+
+## Policy Mode
+
+Commit `.mcp-guard-policy.json` or pass `policy` to enforce approved commands, remote packages, directories, and remote MCP URLs.
+
+```yaml
+- uses: ChaoYue0307/mcp-guard-action@v0.4.4
+  with:
+    config: .mcp.json
+    policy: .mcp-guard-policy.json
     fail-on: high
 ```
 

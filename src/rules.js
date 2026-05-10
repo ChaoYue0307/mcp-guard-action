@@ -31,6 +31,11 @@ export function evaluateServer(server, context) {
   findings.push(...ruleDangerousCommandPattern(server));
   findings.push(...ruleRemoteUrl(server));
   findings.push(...ruleHeaders(server));
+  findings.push(...rulePolicyAllowedCommand(server, context));
+  findings.push(...rulePolicyAllowedPackage(server, context));
+  findings.push(...rulePolicyAllowedWorkingDirectory(server, context));
+  findings.push(...rulePolicyAllowedFilesystemArgs(server, context));
+  findings.push(...rulePolicyAllowedRemoteUrl(server, context));
 
   return findings;
 }
@@ -220,6 +225,103 @@ function ruleHeaders(server) {
   return findings;
 }
 
+function rulePolicyAllowedCommand(server, context) {
+  const policy = context.policy;
+  if (!policy || policy.allowedCommands.size === 0 || !server.command) return [];
+
+  const command = commandBase(server.command);
+  if (policy.allowedCommands.has(command)) return [];
+
+  return [finding({
+    id: "MCP070",
+    severity: "high",
+    title: "MCP server command is not allowed by policy",
+    server,
+    evidence: `command=${server.command} allowed=${listSet(policy.allowedCommands)}`,
+    recommendation: "Use an approved command, or add this command to allowedCommands only after review."
+  })];
+}
+
+function rulePolicyAllowedPackage(server, context) {
+  const policy = context.policy;
+  if (!policy || policy.allowedPackages.size === 0) return [];
+
+  const command = commandBase(server.command);
+  const usesRemoteRunner = REMOTE_EXEC_COMMANDS.has(command) || (PACKAGE_MANAGER_COMMANDS.has(command) && server.args[0] === "dlx");
+  if (!usesRemoteRunner) return [];
+
+  const packageArg = firstPackageArg(server.args);
+  if (!packageArg) return [];
+
+  const packageName = packageIdentity(packageArg);
+  if (policy.allowedPackages.has(packageName)) return [];
+
+  return [finding({
+    id: "MCP071",
+    severity: "high",
+    title: "Remote MCP package is not allowed by policy",
+    server,
+    evidence: `package=${packageName} allowed=${listSet(policy.allowedPackages)}`,
+    recommendation: "Use an approved MCP package, or add this package to allowedPackages only after review."
+  })];
+}
+
+function rulePolicyAllowedWorkingDirectory(server, context) {
+  const policy = context.policy;
+  if (!policy || policy.allowedDirectoryPaths.length === 0 || !server.cwd) return [];
+
+  const normalized = normalizePath(server.cwd, context);
+  if (isAllowedPath(normalized, policy.allowedDirectoryPaths)) return [];
+
+  return [finding({
+    id: "MCP072",
+    severity: "high",
+    title: "MCP server working directory is outside policy",
+    server,
+    evidence: `cwd=${server.cwd} allowed=${policy.allowedDirectories.join(", ")}`,
+    recommendation: "Move this server into an approved workspace directory, or add the directory to allowedDirectories after review."
+  })];
+}
+
+function rulePolicyAllowedFilesystemArgs(server, context) {
+  const policy = context.policy;
+  if (!policy || policy.allowedDirectoryPaths.length === 0) return [];
+
+  const findings = [];
+  for (const arg of server.args) {
+    const value = filesystemPathFromArg(arg);
+    if (!value) continue;
+
+    const normalized = normalizePath(value, context);
+    if (isAllowedPath(normalized, policy.allowedDirectoryPaths)) continue;
+
+    findings.push(finding({
+      id: "MCP073",
+      severity: "high",
+      title: "MCP server filesystem argument is outside policy",
+      server,
+      evidence: `arg=${arg} allowed=${policy.allowedDirectories.join(", ")}`,
+      recommendation: "Limit filesystem arguments to approved directories, or update allowedDirectories only after review."
+    }));
+  }
+  return findings;
+}
+
+function rulePolicyAllowedRemoteUrl(server, context) {
+  const policy = context.policy;
+  if (!policy || policy.allowedRemoteUrls.length === 0 || !server.url) return [];
+  if (isAllowedRemoteUrl(server.url, policy.allowedRemoteUrls)) return [];
+
+  return [finding({
+    id: "MCP074",
+    severity: "high",
+    title: "Remote MCP URL is not allowed by policy",
+    server,
+    evidence: `url=${server.url} allowed=${policy.allowedRemoteUrls.join(", ")}`,
+    recommendation: "Use an approved remote MCP endpoint, or add this URL to allowedRemoteUrls only after review."
+  })];
+}
+
 function finding({ id, severity, title, server, evidence, recommendation }) {
   return {
     id,
@@ -252,11 +354,28 @@ function isPinnedPackage(packageName) {
   return at > 0 && at < packageName.length - 1;
 }
 
+function packageIdentity(packageName) {
+  if (packageName.startsWith("@")) {
+    const secondAt = packageName.indexOf("@", 1);
+    return secondAt > 1 ? packageName.slice(0, secondAt) : packageName;
+  }
+  const at = packageName.lastIndexOf("@");
+  return at > 0 ? packageName.slice(0, at) : packageName;
+}
+
 function valueFromArg(arg) {
   if (!arg) return "";
   const equalIndex = arg.indexOf("=");
   if (equalIndex > -1) return arg.slice(equalIndex + 1);
   if (arg.startsWith("/") || arg.startsWith("~")) return arg;
+  return "";
+}
+
+function filesystemPathFromArg(arg) {
+  const value = valueFromArg(arg);
+  if (!value) return "";
+  if (value === "~" || value.startsWith("~/")) return value;
+  if (value.startsWith("/") || value.startsWith("./") || value.startsWith("../")) return value;
   return "";
 }
 
@@ -268,3 +387,26 @@ function normalizePath(value, context) {
   return path.resolve(context.cwd, value);
 }
 
+function isAllowedPath(filePath, allowedPaths) {
+  return allowedPaths.some((allowedPath) => {
+    const normalizedAllowed = path.normalize(allowedPath);
+    return filePath === normalizedAllowed || filePath.startsWith(`${normalizedAllowed}${path.sep}`);
+  });
+}
+
+function isAllowedRemoteUrl(value, allowedUrls) {
+  let target;
+  try {
+    target = new URL(value);
+  } catch {
+    return false;
+  }
+
+  const targetPath = target.pathname === "/" ? "" : target.pathname.replace(/\/+$/, "");
+  const targetValue = `${target.origin}${targetPath}`;
+  return allowedUrls.some((allowed) => targetValue === allowed || targetValue.startsWith(`${allowed}/`));
+}
+
+function listSet(items) {
+  return [...items].join(", ");
+}

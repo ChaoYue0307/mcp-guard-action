@@ -107,6 +107,8 @@ export function summarize(findings, servers, scannedFiles, acceptedFindingCount 
     }
   }
 
+  const rawRiskScore = counts.critical * 20 + counts.high * 10 + counts.medium * 4 + counts.low;
+
   return {
     scannedFileCount: scannedFiles.length,
     serverCount: servers.length,
@@ -115,7 +117,7 @@ export function summarize(findings, servers, scannedFiles, acceptedFindingCount 
     acceptedFindingCount,
     totalFindingCount: findings.length + acceptedFindingCount,
     counts,
-    riskScore: counts.critical * 20 + counts.high * 10 + counts.medium * 4 + counts.low
+    riskScore: Math.min(100, rawRiskScore)
   };
 }
 

@@ -33,6 +33,9 @@ lines.push(`Active findings: **${report.summary.findingCount}**`);
 if (acceptedCount > 0 || report.baseline?.enabled) {
   lines.push(`Accepted by baseline: **${acceptedCount}**`);
 }
+if (report.policy?.path) {
+  lines.push(`Policy: **${report.policy.path}**`);
+}
 lines.push(`Fail threshold: **${failOn || "high"}**`);
 lines.push("");
 

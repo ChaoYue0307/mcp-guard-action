@@ -19,6 +19,10 @@ inputs:
     description: Optional mcp-guard baseline/allowlist JSON path. Matching findings are accepted and do not fail the workflow.
     required: false
     default: ""
+  policy:
+    description: Optional mcp-guard policy JSON path. Leave empty to auto-load .mcp-guard-policy.json when present.
+    required: false
+    default: ""
   comment-pr:
     description: "Post or update a pull request comment with the scan summary. Requires pull-requests: write permission."
     required: false
@@ -67,6 +71,7 @@ runs:
       uses: actions/setup-node@v6
       with:
         node-version: "24"
+        package-manager-cache: false
 
     - name: Generate reports
       id: reports
@@ -74,6 +79,7 @@ runs:
       env:
         MCP_GUARD_CONFIG: ${{ inputs.config }}
         MCP_GUARD_BASELINE: ${{ inputs.baseline }}
+        MCP_GUARD_POLICY: ${{ inputs.policy }}
         MCP_GUARD_FAIL_ON: ${{ inputs.fail-on }}
         MCP_GUARD_OUTPUT_DIR: ${{ inputs.output-dir }}
       run: |
@@ -88,6 +94,9 @@ runs:
         fi
         if [ -n "${MCP_GUARD_BASELINE}" ]; then
           scan_args+=(--baseline "${MCP_GUARD_BASELINE}")
+        fi
+        if [ -n "${MCP_GUARD_POLICY}" ]; then
+          scan_args+=(--policy "${MCP_GUARD_POLICY}")
         fi
 
         markdown_report="${MCP_GUARD_OUTPUT_DIR}/mcp-guard-report.md"

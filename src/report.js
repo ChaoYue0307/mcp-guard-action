@@ -12,6 +12,9 @@ export function generateTextReport(result) {
     lines.push(`Accepted by baseline: ${result.summary.acceptedFindingCount}`);
     lines.push(`Total observed findings: ${result.summary.totalFindingCount}`);
   }
+  if (hasPolicy(result)) {
+    lines.push(`Policy: ${displayPath(result.policy.path, result.metadata.cwd)}`);
+  }
   lines.push(`Risk score: ${result.summary.riskScore}`);
   lines.push(`Critical: ${result.summary.counts.critical}  High: ${result.summary.counts.high}  Medium: ${result.summary.counts.medium}  Low: ${result.summary.counts.low}`);
   lines.push("");
@@ -69,6 +72,9 @@ export function generateMarkdownReport(result) {
     lines.push(`- Total observed findings: ${result.summary.totalFindingCount}`);
     lines.push(`- Baseline: \`${result.baseline.path || "enabled"}\``);
   }
+  if (hasPolicy(result)) {
+    lines.push(`- Policy: \`${displayPath(result.policy.path, result.metadata.cwd)}\``);
+  }
   lines.push(`- Risk score: ${result.summary.riskScore}`);
   lines.push(`- Critical: ${result.summary.counts.critical}`);
   lines.push(`- High: ${result.summary.counts.high}`);
@@ -86,6 +92,17 @@ export function generateMarkdownReport(result) {
     }
   }
   lines.push("");
+
+  if (hasPolicy(result)) {
+    lines.push("## Policy");
+    lines.push("");
+    lines.push(`- Path: \`${displayPath(result.policy.path, result.metadata.cwd)}\``);
+    lines.push(`- Allowed commands: ${inlineList(result.policy.allowedCommands)}`);
+    lines.push(`- Allowed packages: ${inlineList(result.policy.allowedPackages)}`);
+    lines.push(`- Allowed directories: ${inlineList(result.policy.allowedDirectories)}`);
+    lines.push(`- Allowed remote URLs: ${inlineList(result.policy.allowedRemoteUrls)}`);
+    lines.push("");
+  }
 
   lines.push("## MCP Server Inventory");
   lines.push("");
@@ -510,6 +527,11 @@ export function generateHtmlReport(result) {
       ${renderScannedFiles(safeResult)}
     </section>
 
+${hasPolicy(safeResult) ? `    <section>
+      <h2>Policy</h2>
+      ${renderPolicy(safeResult)}
+    </section>` : ""}
+
     <section>
       <h2>MCP Server Inventory</h2>
       ${renderServerTable(servers, safeResult.metadata.cwd)}
@@ -549,8 +571,13 @@ function sanitizeResult(result) {
     metadata: {
       ...result.metadata,
       cwd: ".",
-      home: "~"
+      home: "~",
+      policyPath: result.metadata.policyPath ? displayPath(result.metadata.policyPath, cwd) : ""
     },
+    policy: result.policy ? {
+      ...result.policy,
+      path: displayPath(result.policy.path, cwd)
+    } : null,
     scannedFiles: result.scannedFiles.map((file) => displayPath(file, cwd)),
     servers: result.servers.map((server) => ({
       name: server.name,
@@ -673,6 +700,19 @@ function renderScannedFiles(result) {
   return `<div class="table-wrap"><table><thead><tr><th>Path</th></tr></thead><tbody>${items}</tbody></table></div>`;
 }
 
+function renderPolicy(result) {
+  const policy = result.policy;
+  const rows = [
+    ["Path", policy.path],
+    ["Allowed commands", policy.allowedCommands.join(", ") || "-"],
+    ["Allowed packages", policy.allowedPackages.join(", ") || "-"],
+    ["Allowed directories", policy.allowedDirectories.join(", ") || "-"],
+    ["Allowed remote URLs", policy.allowedRemoteUrls.join(", ") || "-"]
+  ].map(([key, value]) => `<tr><th>${escapeHtml(key)}</th><td>${codeOrDash(value)}</td></tr>`).join("");
+
+  return `<div class="table-wrap"><table><tbody>${rows}</tbody></table></div>`;
+}
+
 function renderServerTable(servers, cwd) {
   if (servers.length === 0) {
     return `<p class="empty">No MCP servers were found.</p>`;
@@ -774,8 +814,17 @@ function hasBaseline(result) {
   return Boolean(result.baseline?.enabled);
 }
 
+function hasPolicy(result) {
+  return Boolean(result.policy);
+}
+
 function hasAcceptedFindings(result) {
   return (result.acceptedFindings || []).length > 0;
+}
+
+function inlineList(items) {
+  if (!items || items.length === 0) return "not restricted";
+  return items.map((item) => `\`${item}\``).join(", ");
 }
 
 function escapeHtml(value) {

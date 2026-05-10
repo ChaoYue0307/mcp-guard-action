@@ -3,6 +3,7 @@ import path from "node:path";
 import { writeBaselineFile } from "./baseline.js";
 import { discoverConfigFiles } from "./discovery.js";
 import { displayPath } from "./fingerprint.js";
+import { DEFAULT_POLICY_FILE } from "./policy.js";
 import { scan } from "./scan.js";
 
 export async function initProject({
@@ -12,6 +13,7 @@ export async function initProject({
   includeDefaults = true,
   workflowPath,
   baselinePath,
+  policyPath = "",
   failOn = "high",
   commentPr = true,
   uploadSarif = false,
@@ -30,6 +32,7 @@ export async function initProject({
     explicitConfigPaths: configPaths,
     discoveredConfigPaths
   });
+  const workflowPolicyPath = policyPath || await defaultPolicyPath(cwd);
   const files = [];
 
   if (writeBaseline) {
@@ -46,6 +49,7 @@ export async function initProject({
       env,
       configPaths: baselineConfigPaths,
       includeDefaults: false,
+      includePolicy: false,
       toolVersion
     });
     const baseline = await writeBaselineFileIfAllowed(baselinePath, result, {
@@ -65,6 +69,7 @@ export async function initProject({
     actionRef: `ChaoYue0307/mcp-guard-action@v${toolVersion}`,
     configPath: workflowConfigPath ? displayPath(workflowConfigPath, cwd) : "",
     baselinePath: useBaseline || writeBaseline ? displayPath(baselinePath, cwd) : "",
+    policyPath: workflowPolicyPath ? displayPath(workflowPolicyPath, cwd) : "",
     failOn,
     commentPr,
     uploadSarif
@@ -80,10 +85,11 @@ export async function initProject({
     dryRun,
     workflowPath,
     baselinePath,
+    policyPath: workflowPolicyPath,
     configPath: workflowConfigPath,
     discoveredConfigPaths,
     files,
-    nextSteps: buildNextSteps({ workflowPath, baselinePath, writeBaseline, uploadSarif })
+    nextSteps: buildNextSteps({ workflowPath, baselinePath, policyPath: workflowPolicyPath, writeBaseline, uploadSarif })
   };
 }
 
@@ -98,6 +104,9 @@ export function renderInitSummary(result, cwd) {
     lines.push(`Config: ${displayPath(result.configPath, cwd)}`);
   } else {
     lines.push("Config: default discovery paths");
+  }
+  if (result.policyPath) {
+    lines.push(`Policy: ${displayPath(result.policyPath, cwd)}`);
   }
 
   for (const file of result.files) {
@@ -115,7 +124,7 @@ export function renderInitSummary(result, cwd) {
   return `${lines.join("\n")}\n`;
 }
 
-export function renderGithubWorkflow({ actionRef, configPath, baselinePath, failOn, commentPr, uploadSarif }) {
+export function renderGithubWorkflow({ actionRef, configPath, baselinePath, policyPath, failOn, commentPr, uploadSarif }) {
   const permissions = ["  contents: read"];
   if (commentPr) {
     permissions.push("  pull-requests: write");
@@ -130,6 +139,9 @@ export function renderGithubWorkflow({ actionRef, configPath, baselinePath, fail
   }
   if (baselinePath) {
     inputs.push(`          baseline: ${quoteYaml(baselinePath)}`);
+  }
+  if (policyPath) {
+    inputs.push(`          policy: ${quoteYaml(policyPath)}`);
   }
   inputs.push(`          fail-on: ${quoteYaml(failOn)}`);
   if (commentPr) {
@@ -208,6 +220,11 @@ async function writeTextFileIfAllowed(filePath, content, { force, dryRun }) {
   };
 }
 
+async function defaultPolicyPath(cwd) {
+  const filePath = path.join(cwd, DEFAULT_POLICY_FILE);
+  return await fileExists(filePath) ? filePath : "";
+}
+
 async function fileExists(filePath) {
   try {
     await fs.access(filePath);
@@ -217,7 +234,7 @@ async function fileExists(filePath) {
   }
 }
 
-function buildNextSteps({ workflowPath, baselinePath, writeBaseline, uploadSarif }) {
+function buildNextSteps({ workflowPath, baselinePath, policyPath, writeBaseline, uploadSarif }) {
   const steps = [
     `Review ${path.basename(workflowPath)} before committing it.`,
     "Run mcp-guard scan locally and confirm the findings are expected.",
@@ -226,6 +243,10 @@ function buildNextSteps({ workflowPath, baselinePath, writeBaseline, uploadSarif
 
   if (writeBaseline) {
     steps.splice(1, 0, `Review ${path.basename(baselinePath)} because accepted findings will not fail CI.`);
+  }
+
+  if (policyPath) {
+    steps.splice(1, 0, `Review ${path.basename(policyPath)} because it defines approved commands, packages, directories, and remote URLs.`);
   }
 
   if (uploadSarif) {
