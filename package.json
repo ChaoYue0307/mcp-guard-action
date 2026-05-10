@@ -1,6 +1,6 @@
 {
   "name": "mcp-guard-action",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "private": true,
   "description": "GitHub Action wrapper for mcp-guard MCP and AI agent security scanning.",
   "type": "module",

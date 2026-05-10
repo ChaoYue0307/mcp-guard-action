@@ -507,12 +507,17 @@ function displayPath(filePath, cwd) {
 }
 
 function sanitizeResult(result) {
+  const cwd = result.metadata.cwd;
   return {
-    metadata: result.metadata,
-    scannedFiles: result.scannedFiles,
+    metadata: {
+      ...result.metadata,
+      cwd: ".",
+      home: "~"
+    },
+    scannedFiles: result.scannedFiles.map((file) => displayPath(file, cwd)),
     servers: result.servers.map((server) => ({
       name: server.name,
-      configPath: server.configPath,
+      configPath: displayPath(server.configPath, cwd),
       command: server.command,
       args: server.args,
       env: redactEnv(server.env),
@@ -520,7 +525,10 @@ function sanitizeResult(result) {
       url: server.url,
       headers: redactEnv(server.headers)
     })),
-    findings: result.findings,
+    findings: result.findings.map((finding) => ({
+      ...finding,
+      configPath: displayPath(finding.configPath, cwd)
+    })),
     summary: result.summary
   };
 }

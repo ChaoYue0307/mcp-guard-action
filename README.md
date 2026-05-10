@@ -22,7 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: ChaoYue0307/mcp-guard-action@v0.3.0
+      - uses: ChaoYue0307/mcp-guard-action@v0.3.1
         with:
           fail-on: high
 ```
@@ -39,7 +39,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: ChaoYue0307/mcp-guard-action@v0.3.0
+      - uses: ChaoYue0307/mcp-guard-action@v0.3.1
         with:
           config: .mcp.json
           fail-on: high
@@ -72,11 +72,17 @@ jobs:
 The action generates:
 
 - Markdown for pull request review.
-- HTML for audit-ready artifacts.
+- HTML for review-ready artifacts.
 - JSON for automation.
 - SARIF 2.1.0 for GitHub code scanning.
 
 Secret-like values are redacted before reports are written.
+
+## Transparent Example
+
+Inspect a committed input config, reproduction commands, and generated Markdown, HTML, JSON, and SARIF artifacts:
+
+https://chaoyue0307.github.io/mcp-guard/e2e/
 
 ## Links
 
