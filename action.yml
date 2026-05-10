@@ -45,6 +45,9 @@ inputs:
     default: mcp-guard-report
 
 outputs:
+  executive-summary:
+    description: Path to the generated executive summary.
+    value: ${{ steps.reports.outputs.executive-summary }}
   markdown-report:
     description: Path to the generated Markdown report.
     value: ${{ steps.reports.outputs.markdown-report }}
@@ -57,6 +60,12 @@ outputs:
   sarif-report:
     description: Path to the generated SARIF report.
     value: ${{ steps.reports.outputs.sarif-report }}
+  remediation-report:
+    description: Path to the generated remediation plan.
+    value: ${{ steps.reports.outputs.remediation-report }}
+  audit-manifest:
+    description: Path to the generated audit pack manifest.
+    value: ${{ steps.reports.outputs.audit-manifest }}
   exit-code:
     description: mcp-guard threshold exit code.
     value: ${{ steps.reports.outputs.exit-code }}
@@ -103,29 +112,37 @@ runs:
         html_report="${MCP_GUARD_OUTPUT_DIR}/mcp-guard-report.html"
         json_report="${MCP_GUARD_OUTPUT_DIR}/mcp-guard-report.json"
         sarif_report="${MCP_GUARD_OUTPUT_DIR}/mcp-guard.sarif"
+        executive_summary="${MCP_GUARD_OUTPUT_DIR}/mcp-guard-executive-summary.md"
+        remediation_report="${MCP_GUARD_OUTPUT_DIR}/mcp-guard-remediation.md"
+        audit_manifest="${MCP_GUARD_OUTPUT_DIR}/mcp-guard-audit-manifest.json"
         comment_report="${MCP_GUARD_OUTPUT_DIR}/mcp-guard-pr-comment.md"
 
-        node "${guard_bin}" scan "${scan_args[@]}" --format markdown --output "${markdown_report}" --fail-on none
-        node "${guard_bin}" scan "${scan_args[@]}" --format html --output "${html_report}" --fail-on none
-        node "${guard_bin}" scan "${scan_args[@]}" --format json --output "${json_report}" --fail-on none
-        node "${guard_bin}" scan "${scan_args[@]}" --format sarif --output "${sarif_report}" --fail-on none
+        set +e
+        node "${guard_bin}" audit "${scan_args[@]}" --output-dir "${MCP_GUARD_OUTPUT_DIR}" --fail-on "${MCP_GUARD_FAIL_ON}"
+        status="$?"
+        set -e
+        if [ "${status}" != "0" ] && [ "${status}" != "2" ]; then
+          exit "${status}"
+        fi
+
         node "${GITHUB_ACTION_PATH}/scripts/action-comment.js" \
           "${json_report}" \
           "${markdown_report}" \
           "${html_report}" \
           "${sarif_report}" \
-          "${MCP_GUARD_FAIL_ON}" > "${comment_report}"
-
-        set +e
-        node "${guard_bin}" scan "${scan_args[@]}" --fail-on "${MCP_GUARD_FAIL_ON}"
-        status="$?"
-        set -e
+          "${MCP_GUARD_FAIL_ON}" \
+          "${executive_summary}" \
+          "${remediation_report}" \
+          "${audit_manifest}" > "${comment_report}"
 
         {
+          echo "executive-summary=${executive_summary}"
           echo "markdown-report=${markdown_report}"
           echo "html-report=${html_report}"
           echo "json-report=${json_report}"
           echo "sarif-report=${sarif_report}"
+          echo "remediation-report=${remediation_report}"
+          echo "audit-manifest=${audit_manifest}"
           echo "comment-report=${comment_report}"
           echo "exit-code=${status}"
         } >> "${GITHUB_OUTPUT}"
@@ -141,7 +158,10 @@ runs:
           "${{ steps.reports.outputs.markdown-report }}" \
           "${{ steps.reports.outputs.html-report }}" \
           "${{ steps.reports.outputs.sarif-report }}" \
-          "${MCP_GUARD_FAIL_ON}" >> "${GITHUB_STEP_SUMMARY}"
+          "${MCP_GUARD_FAIL_ON}" \
+          "${{ steps.reports.outputs.executive-summary }}" \
+          "${{ steps.reports.outputs.remediation-report }}" \
+          "${{ steps.reports.outputs.audit-manifest }}" >> "${GITHUB_STEP_SUMMARY}"
 
     - name: Comment on pull request
       if: ${{ always() && inputs.comment-pr == 'true' && github.event_name == 'pull_request' && steps.reports.outputs.comment-report != '' }}

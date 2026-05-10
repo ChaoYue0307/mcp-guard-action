@@ -3,10 +3,10 @@
 import fs from "node:fs";
 import path from "node:path";
 
-const [jsonReportPath, markdownReportPath, htmlReportPath, sarifReportPath, failOn] = process.argv.slice(2);
+const [jsonReportPath, markdownReportPath, htmlReportPath, sarifReportPath, failOn, executiveSummaryPath, remediationReportPath, auditManifestPath] = process.argv.slice(2);
 
 if (!jsonReportPath) {
-  process.stderr.write("Usage: action-summary.js <json-report> <markdown-report> <html-report> <sarif-report> <fail-on>\n");
+  process.stderr.write("Usage: action-summary.js <json-report> <markdown-report> <html-report> <sarif-report> <fail-on> [executive-summary] [remediation-report] [audit-manifest]\n");
   process.exit(1);
 }
 
@@ -58,6 +58,15 @@ lines.push(`- Markdown: \`${relative(markdownReportPath)}\``);
 lines.push(`- HTML: \`${relative(htmlReportPath)}\``);
 lines.push(`- JSON: \`${relative(jsonReportPath)}\``);
 lines.push(`- SARIF: \`${relative(sarifReportPath)}\``);
+if (executiveSummaryPath) {
+  lines.push(`- Executive summary: \`${relative(executiveSummaryPath)}\``);
+}
+if (remediationReportPath) {
+  lines.push(`- Remediation: \`${relative(remediationReportPath)}\``);
+}
+if (auditManifestPath) {
+  lines.push(`- Audit manifest: \`${relative(auditManifestPath)}\``);
+}
 lines.push("");
 
 process.stdout.write(`${lines.join("\n")}\n`);

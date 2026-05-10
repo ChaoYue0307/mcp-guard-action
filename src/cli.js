@@ -1,12 +1,13 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { generateAuditSummary, writeAuditPack } from "./audit.js";
 import { applyBaseline, loadBaselineFile, writeBaselineFile } from "./baseline.js";
 import { initProject, renderInitSummary } from "./init.js";
 import { scan } from "./scan.js";
 import { generateHtmlReport, generateJsonReport, generateMarkdownReport, generateSarifReport, generateTextReport } from "./report.js";
 import { compareSeverity, severityRank } from "./severity.js";
 
-const VERSION = "0.4.4";
+const VERSION = "0.4.5";
 
 export async function runCli(argv, io) {
   const args = argv.slice(2);
@@ -48,6 +49,38 @@ export async function runCli(argv, io) {
       toolVersion: VERSION
     });
     io.stdout.write(renderInitSummary(result, options.cwd));
+    return 0;
+  }
+
+  if (command === "audit") {
+    if (args.includes("--help") || args.includes("-h")) {
+      io.stdout.write(helpText());
+      return 0;
+    }
+
+    const options = parseAuditArgs(args.slice(1), io.cwd);
+    const audit = await writeAuditPack({
+      cwd: options.cwd,
+      env: io.env,
+      outputDir: options.outputDir,
+      configPaths: options.configPaths,
+      includeDefaults: options.includeDefaults,
+      baselinePath: options.baselinePath,
+      policyPath: options.policyPath,
+      includePolicy: options.includePolicy,
+      failOn: options.failOn,
+      toolVersion: VERSION
+    });
+    io.stdout.write(generateAuditSummary(audit.result, {
+      outputDir: audit.outputDir,
+      files: audit.files
+    }));
+
+    if (options.failOn !== "none" && shouldFail(audit.result, options.failOn)) {
+      process.exitCode = 2;
+      return 2;
+    }
+
     return 0;
   }
 
@@ -249,6 +282,53 @@ function parseScanArgs(args, defaultCwd) {
   return options;
 }
 
+function parseAuditArgs(args, defaultCwd) {
+  const options = {
+    cwd: defaultCwd,
+    configPaths: [],
+    includeDefaults: true,
+    outputDir: "mcp-guard-audit",
+    failOn: "none",
+    baselinePath: "",
+    policyPath: "",
+    includePolicy: true
+  };
+
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (arg === "--config" || arg === "-c") {
+      options.configPaths.push(resolveInputPath(readValue(args, index, arg), options.cwd));
+      index += 1;
+    } else if (arg === "--output-dir" || arg === "-o") {
+      options.outputDir = readValue(args, index, arg);
+      index += 1;
+    } else if (arg === "--fail-on") {
+      options.failOn = readValue(args, index, arg);
+      index += 1;
+      if (!["critical", "high", "medium", "low", "none"].includes(options.failOn)) {
+        throw new Error("--fail-on must be one of: critical, high, medium, low, none");
+      }
+    } else if (arg === "--baseline" || arg === "--allowlist") {
+      options.baselinePath = resolveInputPath(readValue(args, index, arg), options.cwd);
+      index += 1;
+    } else if (arg === "--policy") {
+      options.policyPath = resolveInputPath(readValue(args, index, arg), options.cwd);
+      index += 1;
+    } else if (arg === "--cwd") {
+      options.cwd = path.resolve(readValue(args, index, arg));
+      index += 1;
+    } else if (arg === "--no-policy") {
+      options.includePolicy = false;
+    } else if (arg === "--no-defaults") {
+      options.includeDefaults = false;
+    } else {
+      throw new Error(`Unknown audit option: ${arg}`);
+    }
+  }
+
+  return options;
+}
+
 function readValue(args, index, optionName) {
   const value = args[index + 1];
   if (!value || value.startsWith("--")) {
@@ -289,6 +369,7 @@ Open-source scanner for risky MCP server and AI agent tool configuration.
 
 Usage:
   mcp-guard scan [options]
+  mcp-guard audit [options]
   mcp-guard init [options]
   mcp-guard version
   mcp-guard help
@@ -327,10 +408,24 @@ Scan options:
       --no-policy           Do not auto-load .mcp-guard-policy.json.
       --no-defaults         Only scan paths passed with --config.
 
+Audit options:
+  -c, --config <path>       Scan a specific MCP config file. Can be repeated.
+  -o, --output-dir <path>   Write an audit pack directory. Default: mcp-guard-audit.
+      --fail-on <severity>  Exit 2 when finding severity is at least threshold.
+                            critical, high, medium, low, none. Default: none.
+      --baseline <path>     Accept matching known findings from a baseline JSON file.
+      --policy <path>       Enforce an explicit policy file.
+                            Default: auto-load .mcp-guard-policy.json when present.
+      --cwd <path>          Working directory for project config discovery.
+      --no-policy           Do not auto-load .mcp-guard-policy.json.
+      --no-defaults         Only scan paths passed with --config.
+
 Examples:
   mcp-guard init
   mcp-guard init --write-baseline --upload-sarif
   mcp-guard scan
+  mcp-guard audit --config .mcp.json --output-dir mcp-guard-audit
+  mcp-guard audit --config .mcp.json --policy .mcp-guard-policy.json --fail-on high
   mcp-guard scan --format markdown --output mcp-guard-report.md
   mcp-guard scan --format html --output mcp-guard-report.html
   mcp-guard scan --format sarif --output mcp-guard.sarif
