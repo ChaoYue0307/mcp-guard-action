@@ -1,0 +1,135 @@
+name: mcp-guard MCP Security Scanner
+description: Scan MCP and AI agent tool configuration for risky commands, secrets, and broad permissions.
+author: mcp-guard
+
+branding:
+  icon: shield
+  color: green
+
+inputs:
+  config:
+    description: Optional MCP config path to scan. Leave empty to scan default project and user config locations.
+    required: false
+    default: ""
+  fail-on:
+    description: Fail the workflow when a finding is at least this severity. Use critical, high, medium, low, or none.
+    required: false
+    default: high
+  output-dir:
+    description: Directory where reports will be written.
+    required: false
+    default: mcp-guard-report
+  upload-artifact:
+    description: Upload generated reports as a workflow artifact.
+    required: false
+    default: "true"
+  upload-sarif:
+    description: "Upload SARIF to GitHub code scanning. Requires security-events: write permission."
+    required: false
+    default: "false"
+  artifact-name:
+    description: Artifact name for generated reports.
+    required: false
+    default: mcp-guard-report
+
+outputs:
+  markdown-report:
+    description: Path to the generated Markdown report.
+    value: ${{ steps.reports.outputs.markdown-report }}
+  html-report:
+    description: Path to the generated HTML report.
+    value: ${{ steps.reports.outputs.html-report }}
+  json-report:
+    description: Path to the generated JSON report.
+    value: ${{ steps.reports.outputs.json-report }}
+  sarif-report:
+    description: Path to the generated SARIF report.
+    value: ${{ steps.reports.outputs.sarif-report }}
+  exit-code:
+    description: mcp-guard threshold exit code.
+    value: ${{ steps.reports.outputs.exit-code }}
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: "20"
+
+    - name: Generate reports
+      id: reports
+      shell: bash
+      env:
+        MCP_GUARD_CONFIG: ${{ inputs.config }}
+        MCP_GUARD_FAIL_ON: ${{ inputs.fail-on }}
+        MCP_GUARD_OUTPUT_DIR: ${{ inputs.output-dir }}
+      run: |
+        set -euo pipefail
+
+        guard_bin="${GITHUB_ACTION_PATH}/bin/mcp-guard.js"
+        mkdir -p "${MCP_GUARD_OUTPUT_DIR}"
+
+        scan_args=()
+        if [ -n "${MCP_GUARD_CONFIG}" ]; then
+          scan_args+=(--config "${MCP_GUARD_CONFIG}")
+        fi
+
+        markdown_report="${MCP_GUARD_OUTPUT_DIR}/mcp-guard-report.md"
+        html_report="${MCP_GUARD_OUTPUT_DIR}/mcp-guard-report.html"
+        json_report="${MCP_GUARD_OUTPUT_DIR}/mcp-guard-report.json"
+        sarif_report="${MCP_GUARD_OUTPUT_DIR}/mcp-guard.sarif"
+
+        node "${guard_bin}" scan "${scan_args[@]}" --format markdown --output "${markdown_report}" --fail-on none
+        node "${guard_bin}" scan "${scan_args[@]}" --format html --output "${html_report}" --fail-on none
+        node "${guard_bin}" scan "${scan_args[@]}" --format json --output "${json_report}" --fail-on none
+        node "${guard_bin}" scan "${scan_args[@]}" --format sarif --output "${sarif_report}" --fail-on none
+
+        set +e
+        node "${guard_bin}" scan "${scan_args[@]}" --fail-on "${MCP_GUARD_FAIL_ON}"
+        status="$?"
+        set -e
+
+        {
+          echo "markdown-report=${markdown_report}"
+          echo "html-report=${html_report}"
+          echo "json-report=${json_report}"
+          echo "sarif-report=${sarif_report}"
+          echo "exit-code=${status}"
+        } >> "${GITHUB_OUTPUT}"
+
+    - name: Write job summary
+      if: ${{ always() && steps.reports.outputs.json-report != '' }}
+      shell: bash
+      env:
+        MCP_GUARD_FAIL_ON: ${{ inputs.fail-on }}
+      run: |
+        node "${GITHUB_ACTION_PATH}/scripts/action-summary.js" \
+          "${{ steps.reports.outputs.json-report }}" \
+          "${{ steps.reports.outputs.markdown-report }}" \
+          "${{ steps.reports.outputs.html-report }}" \
+          "${{ steps.reports.outputs.sarif-report }}" \
+          "${MCP_GUARD_FAIL_ON}" >> "${GITHUB_STEP_SUMMARY}"
+
+    - name: Upload report artifact
+      if: ${{ always() && inputs.upload-artifact == 'true' }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: ${{ inputs.output-dir }}
+
+    - name: Upload SARIF to code scanning
+      if: ${{ always() && inputs.upload-sarif == 'true' && steps.reports.outputs.sarif-report != '' }}
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: ${{ steps.reports.outputs.sarif-report }}
+
+    - name: Enforce severity threshold
+      shell: bash
+      env:
+        MCP_GUARD_EXIT_CODE: ${{ steps.reports.outputs.exit-code }}
+      run: |
+        if [ -z "${MCP_GUARD_EXIT_CODE}" ]; then
+          exit 1
+        fi
+        exit "${MCP_GUARD_EXIT_CODE}"
