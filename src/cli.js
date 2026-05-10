@@ -1,10 +1,11 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { applyBaseline, loadBaselineFile, writeBaselineFile } from "./baseline.js";
 import { scan } from "./scan.js";
 import { generateHtmlReport, generateJsonReport, generateMarkdownReport, generateSarifReport, generateTextReport } from "./report.js";
 import { compareSeverity, severityRank } from "./severity.js";
 
-const VERSION = "0.3.1";
+const VERSION = "0.4.0";
 
 export async function runCli(argv, io) {
   const args = argv.slice(2);
@@ -41,17 +42,27 @@ export async function runCli(argv, io) {
     toolVersion: VERSION
   });
 
-  const report = renderReport(result, options.format);
+  if (options.writeBaselinePath) {
+    const baseline = await writeBaselineFile(options.writeBaselinePath, result, {
+      reason: options.baselineReason
+    });
+    io.stderr.write(`Wrote baseline with ${baseline.findings.length} findings to ${options.writeBaselinePath}\n`);
+  }
+
+  const baseline = options.baselinePath ? await loadBaselineFile(options.baselinePath) : null;
+  const reportResult = baseline ? applyBaseline(result, baseline, { baselinePath: options.baselinePath }) : result;
+
+  const report = renderReport(reportResult, options.format);
   if (options.outputPath) {
     await fs.mkdir(path.dirname(options.outputPath), { recursive: true });
     await fs.writeFile(options.outputPath, report, "utf8");
     io.stdout.write(`Wrote ${options.format} report to ${options.outputPath}\n`);
-    io.stdout.write(generateTextReport(result));
+    io.stdout.write(generateTextReport(reportResult));
   } else {
     io.stdout.write(report);
   }
 
-  if (options.failOn !== "none" && shouldFail(result, options.failOn)) {
+  if (options.failOn !== "none" && shouldFail(reportResult, options.failOn)) {
     process.exitCode = 2;
     return 2;
   }
@@ -66,7 +77,10 @@ function parseScanArgs(args, defaultCwd) {
     includeDefaults: true,
     outputPath: "",
     format: "text",
-    failOn: "none"
+    failOn: "none",
+    baselinePath: "",
+    writeBaselinePath: "",
+    baselineReason: "Accepted current MCP findings"
   };
 
   for (let index = 0; index < args.length; index += 1) {
@@ -89,6 +103,15 @@ function parseScanArgs(args, defaultCwd) {
       if (!["critical", "high", "medium", "low", "none"].includes(options.failOn)) {
         throw new Error("--fail-on must be one of: critical, high, medium, low, none");
       }
+    } else if (arg === "--baseline" || arg === "--allowlist") {
+      options.baselinePath = resolveInputPath(readValue(args, index, arg), options.cwd);
+      index += 1;
+    } else if (arg === "--write-baseline" || arg === "--write-allowlist") {
+      options.writeBaselinePath = resolveInputPath(readValue(args, index, arg), options.cwd);
+      index += 1;
+    } else if (arg === "--baseline-reason") {
+      options.baselineReason = readValue(args, index, arg);
+      index += 1;
     } else if (arg === "--cwd") {
       options.cwd = path.resolve(readValue(args, index, arg));
       index += 1;
@@ -151,6 +174,11 @@ Scan options:
   -f, --format <format>     text, markdown, json, html, or sarif. Default: text.
       --fail-on <severity>  Exit 2 when finding severity is at least threshold.
                             critical, high, medium, low, none. Default: none.
+      --baseline <path>     Accept matching known findings from a baseline JSON file.
+      --write-baseline <path>
+                            Write current findings to a baseline JSON file.
+      --baseline-reason <text>
+                            Reason stored for newly written baseline entries.
       --cwd <path>          Working directory for project config discovery.
       --no-defaults         Only scan paths passed with --config.
 
@@ -160,5 +188,7 @@ Examples:
   mcp-guard scan --format html --output mcp-guard-report.html
   mcp-guard scan --format sarif --output mcp-guard.sarif
   mcp-guard scan --config .mcp.json --fail-on high
+  mcp-guard scan --config .mcp.json --write-baseline .mcp-guard-baseline.json
+  mcp-guard scan --config .mcp.json --baseline .mcp-guard-baseline.json --fail-on high
 `;
 }

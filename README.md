@@ -16,15 +16,18 @@ on:
 
 permissions:
   contents: read
+  pull-requests: write
 
 jobs:
   scan:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: ChaoYue0307/mcp-guard-action@v0.3.1
+      - uses: ChaoYue0307/mcp-guard-action@v0.4.0
         with:
+          config: .mcp.json
           fail-on: high
+          comment-pr: "true"
 ```
 
 ## Upload SARIF to GitHub Security
@@ -39,7 +42,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: ChaoYue0307/mcp-guard-action@v0.3.1
+      - uses: ChaoYue0307/mcp-guard-action@v0.4.0
         with:
           config: .mcp.json
           fail-on: high
@@ -52,6 +55,8 @@ jobs:
 | --- | --- | --- |
 | `config` | empty | Optional MCP config path. Empty scans default project and user config locations. |
 | `fail-on` | `high` | Fails the job for `critical`, `high`, `medium`, or `low` findings. Use `none` for report-only mode. |
+| `baseline` | empty | Optional baseline/allowlist JSON path. Matching findings are accepted and do not fail the workflow. |
+| `comment-pr` | `false` | Posts or updates a pull request comment with the scan summary. Requires `pull-requests: write`. |
 | `output-dir` | `mcp-guard-report` | Directory for generated reports. |
 | `upload-artifact` | `true` | Uploads generated reports as a workflow artifact. |
 | `upload-sarif` | `false` | Uploads SARIF to GitHub code scanning. Requires `security-events: write`. |
@@ -65,6 +70,7 @@ jobs:
 | `html-report` | Path to the generated HTML report. |
 | `json-report` | Path to the generated JSON report. |
 | `sarif-report` | Path to the generated SARIF report. |
+| `comment-report` | Path to the generated pull request comment body. |
 | `exit-code` | `0` when below threshold, `2` when findings met the threshold. |
 
 ## Reports
@@ -77,6 +83,24 @@ The action generates:
 - SARIF 2.1.0 for GitHub code scanning.
 
 Secret-like values are redacted before reports are written.
+
+## Baseline Mode
+
+Generate and commit a baseline when existing MCP risk is known and accepted:
+
+```bash
+mcp-guard scan --config .mcp.json --write-baseline .mcp-guard-baseline.json
+```
+
+Then enforce only new findings:
+
+```yaml
+- uses: ChaoYue0307/mcp-guard-action@v0.4.0
+  with:
+    config: .mcp.json
+    baseline: .mcp-guard-baseline.json
+    fail-on: high
+```
 
 ## Transparent Example
 

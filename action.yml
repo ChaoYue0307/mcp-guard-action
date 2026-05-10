@@ -15,6 +15,14 @@ inputs:
     description: Fail the workflow when a finding is at least this severity. Use critical, high, medium, low, or none.
     required: false
     default: high
+  baseline:
+    description: Optional mcp-guard baseline/allowlist JSON path. Matching findings are accepted and do not fail the workflow.
+    required: false
+    default: ""
+  comment-pr:
+    description: Post or update a pull request comment with the scan summary. Requires pull-requests: write permission.
+    required: false
+    default: "false"
   output-dir:
     description: Directory where reports will be written.
     required: false
@@ -48,6 +56,9 @@ outputs:
   exit-code:
     description: mcp-guard threshold exit code.
     value: ${{ steps.reports.outputs.exit-code }}
+  comment-report:
+    description: Path to the generated pull request comment body.
+    value: ${{ steps.reports.outputs.comment-report }}
 
 runs:
   using: composite
@@ -62,6 +73,7 @@ runs:
       shell: bash
       env:
         MCP_GUARD_CONFIG: ${{ inputs.config }}
+        MCP_GUARD_BASELINE: ${{ inputs.baseline }}
         MCP_GUARD_FAIL_ON: ${{ inputs.fail-on }}
         MCP_GUARD_OUTPUT_DIR: ${{ inputs.output-dir }}
       run: |
@@ -74,16 +86,26 @@ runs:
         if [ -n "${MCP_GUARD_CONFIG}" ]; then
           scan_args+=(--config "${MCP_GUARD_CONFIG}")
         fi
+        if [ -n "${MCP_GUARD_BASELINE}" ]; then
+          scan_args+=(--baseline "${MCP_GUARD_BASELINE}")
+        fi
 
         markdown_report="${MCP_GUARD_OUTPUT_DIR}/mcp-guard-report.md"
         html_report="${MCP_GUARD_OUTPUT_DIR}/mcp-guard-report.html"
         json_report="${MCP_GUARD_OUTPUT_DIR}/mcp-guard-report.json"
         sarif_report="${MCP_GUARD_OUTPUT_DIR}/mcp-guard.sarif"
+        comment_report="${MCP_GUARD_OUTPUT_DIR}/mcp-guard-pr-comment.md"
 
         node "${guard_bin}" scan "${scan_args[@]}" --format markdown --output "${markdown_report}" --fail-on none
         node "${guard_bin}" scan "${scan_args[@]}" --format html --output "${html_report}" --fail-on none
         node "${guard_bin}" scan "${scan_args[@]}" --format json --output "${json_report}" --fail-on none
         node "${guard_bin}" scan "${scan_args[@]}" --format sarif --output "${sarif_report}" --fail-on none
+        node "${GITHUB_ACTION_PATH}/scripts/action-comment.js" \
+          "${json_report}" \
+          "${markdown_report}" \
+          "${html_report}" \
+          "${sarif_report}" \
+          "${MCP_GUARD_FAIL_ON}" > "${comment_report}"
 
         set +e
         node "${guard_bin}" scan "${scan_args[@]}" --fail-on "${MCP_GUARD_FAIL_ON}"
@@ -95,6 +117,7 @@ runs:
           echo "html-report=${html_report}"
           echo "json-report=${json_report}"
           echo "sarif-report=${sarif_report}"
+          echo "comment-report=${comment_report}"
           echo "exit-code=${status}"
         } >> "${GITHUB_OUTPUT}"
 
@@ -110,6 +133,43 @@ runs:
           "${{ steps.reports.outputs.html-report }}" \
           "${{ steps.reports.outputs.sarif-report }}" \
           "${MCP_GUARD_FAIL_ON}" >> "${GITHUB_STEP_SUMMARY}"
+
+    - name: Comment on pull request
+      if: ${{ always() && inputs.comment-pr == 'true' && github.event_name == 'pull_request' && steps.reports.outputs.comment-report != '' }}
+      uses: actions/github-script@v7
+      env:
+        MCP_GUARD_COMMENT_PATH: ${{ steps.reports.outputs.comment-report }}
+      with:
+        script: |
+          const fs = require('fs');
+          const marker = '<!-- mcp-guard-comment -->';
+          const body = fs.readFileSync(process.env.MCP_GUARD_COMMENT_PATH, 'utf8');
+          const issue_number = context.payload.pull_request.number;
+          const { owner, repo } = context.repo;
+          const comments = await github.rest.issues.listComments({
+            owner,
+            repo,
+            issue_number,
+            per_page: 100
+          });
+          const previous = comments.data.find((comment) =>
+            comment.user?.type === 'Bot' && comment.body?.includes(marker)
+          );
+          if (previous) {
+            await github.rest.issues.updateComment({
+              owner,
+              repo,
+              comment_id: previous.id,
+              body
+            });
+          } else {
+            await github.rest.issues.createComment({
+              owner,
+              repo,
+              issue_number,
+              body
+            });
+          }
 
     - name: Upload report artifact
       if: ${{ always() && inputs.upload-artifact == 'true' }}

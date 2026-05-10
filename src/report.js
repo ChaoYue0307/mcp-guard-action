@@ -1,3 +1,4 @@
+import { displayPath, stableHash } from "./fingerprint.js";
 import { redactEnv } from "./redact.js";
 
 export function generateTextReport(result) {
@@ -6,7 +7,11 @@ export function generateTextReport(result) {
   lines.push(`Generated: ${result.metadata.generatedAt}`);
   lines.push(`Scanned files: ${result.summary.scannedFileCount}`);
   lines.push(`MCP servers: ${result.summary.serverCount}`);
-  lines.push(`Findings: ${result.summary.findingCount}`);
+  lines.push(`Active findings: ${result.summary.findingCount}`);
+  if (hasBaseline(result)) {
+    lines.push(`Accepted by baseline: ${result.summary.acceptedFindingCount}`);
+    lines.push(`Total observed findings: ${result.summary.totalFindingCount}`);
+  }
   lines.push(`Risk score: ${result.summary.riskScore}`);
   lines.push(`Critical: ${result.summary.counts.critical}  High: ${result.summary.counts.high}  Medium: ${result.summary.counts.medium}  Low: ${result.summary.counts.low}`);
   lines.push("");
@@ -20,16 +25,29 @@ export function generateTextReport(result) {
   }
 
   if (result.findings.length === 0) {
-    lines.push("No findings.");
-    return `${lines.join("\n")}\n`;
+    lines.push("No active findings.");
+  } else {
+    lines.push("Active findings:");
+    for (const finding of result.findings) {
+      lines.push(`- [${finding.severity.toUpperCase()}] ${finding.id} ${finding.title}`);
+      lines.push(`  Server: ${finding.serverName}`);
+      lines.push(`  Evidence: ${finding.evidence}`);
+      lines.push(`  Fingerprint: ${finding.fingerprint}`);
+      lines.push(`  Fix: ${finding.recommendation}`);
+    }
   }
 
-  lines.push("Findings:");
-  for (const finding of result.findings) {
-    lines.push(`- [${finding.severity.toUpperCase()}] ${finding.id} ${finding.title}`);
-    lines.push(`  Server: ${finding.serverName}`);
-    lines.push(`  Evidence: ${finding.evidence}`);
-    lines.push(`  Fix: ${finding.recommendation}`);
+  if (hasAcceptedFindings(result)) {
+    lines.push("");
+    lines.push("Accepted by baseline:");
+    for (const finding of result.acceptedFindings) {
+      lines.push(`- [${finding.severity.toUpperCase()}] ${finding.id} ${finding.title}`);
+      lines.push(`  Server: ${finding.serverName}`);
+      lines.push(`  Fingerprint: ${finding.fingerprint}`);
+      if (finding.acceptedReason) {
+        lines.push(`  Reason: ${finding.acceptedReason}`);
+      }
+    }
   }
 
   return `${lines.join("\n")}\n`;
@@ -45,7 +63,12 @@ export function generateMarkdownReport(result) {
   lines.push("");
   lines.push(`- Scanned files: ${result.summary.scannedFileCount}`);
   lines.push(`- MCP servers: ${result.summary.serverCount}`);
-  lines.push(`- Findings: ${result.summary.findingCount}`);
+  lines.push(`- Active findings: ${result.summary.findingCount}`);
+  if (hasBaseline(result)) {
+    lines.push(`- Accepted by baseline: ${result.summary.acceptedFindingCount}`);
+    lines.push(`- Total observed findings: ${result.summary.totalFindingCount}`);
+    lines.push(`- Baseline: \`${result.baseline.path || "enabled"}\``);
+  }
   lines.push(`- Risk score: ${result.summary.riskScore}`);
   lines.push(`- Critical: ${result.summary.counts.critical}`);
   lines.push(`- High: ${result.summary.counts.high}`);
@@ -78,18 +101,33 @@ export function generateMarkdownReport(result) {
   }
   lines.push("");
 
-  lines.push("## Findings");
+  lines.push("## Active Findings");
   lines.push("");
   if (result.findings.length === 0) {
-    lines.push("No findings.");
+    lines.push("No active findings.");
   } else {
-    lines.push("| Severity | Rule | Server | Finding | Evidence | Recommendation |");
-    lines.push("| --- | --- | --- | --- | --- | --- |");
+    lines.push("| Severity | Rule | Server | Finding | Evidence | Fingerprint | Recommendation |");
+    lines.push("| --- | --- | --- | --- | --- | --- | --- |");
     for (const finding of result.findings) {
-      lines.push(`| ${cell(finding.severity)} | ${cell(finding.id)} | ${cell(finding.serverName)} | ${cell(finding.title)} | ${cell(finding.evidence)} | ${cell(finding.recommendation)} |`);
+      lines.push(`| ${cell(finding.severity)} | ${cell(finding.id)} | ${cell(finding.serverName)} | ${cell(finding.title)} | ${cell(finding.evidence)} | ${cell(finding.fingerprint)} | ${cell(finding.recommendation)} |`);
     }
   }
   lines.push("");
+
+  if (hasBaseline(result)) {
+    lines.push("## Accepted Baseline Findings");
+    lines.push("");
+    if (!hasAcceptedFindings(result)) {
+      lines.push("No current findings matched the baseline.");
+    } else {
+      lines.push("| Severity | Rule | Server | Finding | Fingerprint | Reason |");
+      lines.push("| --- | --- | --- | --- | --- | --- |");
+      for (const finding of result.acceptedFindings) {
+        lines.push(`| ${cell(finding.severity)} | ${cell(finding.id)} | ${cell(finding.serverName)} | ${cell(finding.title)} | ${cell(finding.fingerprint)} | ${cell(finding.acceptedReason || "-")} |`);
+      }
+    }
+    lines.push("");
+  }
 
   lines.push("## Notes");
   lines.push("");
@@ -143,6 +181,7 @@ export function generateHtmlReport(result) {
   const safeResult = sanitizeResult(result);
   const riskTone = riskToneForScore(safeResult.summary.riskScore);
   const findings = safeResult.findings;
+  const acceptedFindings = safeResult.acceptedFindings || [];
   const servers = safeResult.servers;
 
   return `<!doctype html>
@@ -443,8 +482,8 @@ export function generateHtmlReport(result) {
         <div class="grid">
           ${metric("Scanned files", safeResult.summary.scannedFileCount)}
           ${metric("MCP servers", safeResult.summary.serverCount)}
-          ${metric("Findings", safeResult.summary.findingCount)}
-          ${metric("Generated", formatDate(safeResult.metadata.generatedAt))}
+          ${metric("Active findings", safeResult.summary.findingCount)}
+          ${metric(hasBaseline(safeResult) ? "Accepted baseline" : "Generated", hasBaseline(safeResult) ? safeResult.summary.acceptedFindingCount : formatDate(safeResult.metadata.generatedAt))}
         </div>
       </div>
       <aside class="scorecard" aria-label="Risk score">
@@ -477,9 +516,14 @@ export function generateHtmlReport(result) {
     </section>
 
     <section>
-      <h2>Findings</h2>
+      <h2>Active Findings</h2>
       ${renderFindingsTable(findings)}
     </section>
+
+${hasBaseline(safeResult) ? `    <section>
+      <h2>Accepted Baseline Findings</h2>
+      ${renderAcceptedFindingsTable(acceptedFindings)}
+    </section>` : ""}
 
     <section class="notes">
       <h2>Review Notes</h2>
@@ -497,13 +541,6 @@ export function generateHtmlReport(result) {
 
 function cell(value) {
   return String(value).replaceAll("|", "\\|").replaceAll("\n", "<br>");
-}
-
-function displayPath(filePath, cwd) {
-  if (!filePath || !cwd) return filePath;
-  if (filePath === cwd) return ".";
-  if (filePath.startsWith(`${cwd}/`)) return filePath.slice(cwd.length + 1);
-  return filePath;
 }
 
 function sanitizeResult(result) {
@@ -529,7 +566,12 @@ function sanitizeResult(result) {
       ...finding,
       configPath: displayPath(finding.configPath, cwd)
     })),
-    summary: result.summary
+    acceptedFindings: (result.acceptedFindings || []).map((finding) => ({
+      ...finding,
+      configPath: displayPath(finding.configPath, cwd)
+    })),
+    summary: result.summary,
+    baseline: result.baseline || { enabled: false }
   };
 }
 
@@ -589,7 +631,7 @@ function sarifResult(finding, cwd) {
       }
     ],
     partialFingerprints: {
-      "mcp-guard/rule-server-evidence": fingerprint(`${finding.id}:${finding.serverName}:${finding.evidence}`)
+      "mcp-guard/rule-server-evidence": finding.fingerprint || stableHash(`${finding.id}:${finding.serverName}:${finding.evidence}`)
     },
     properties: {
       severity: finding.severity,
@@ -609,15 +651,6 @@ function sarifLevel(severity) {
 function uriFromPath(filePath, cwd) {
   const display = displayPath(filePath, cwd) || ".";
   return display.split("/").map(encodeURIComponent).join("/");
-}
-
-function fingerprint(value) {
-  let hash = 2166136261;
-  for (let index = 0; index < value.length; index += 1) {
-    hash ^= value.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
-  return (hash >>> 0).toString(16).padStart(8, "0");
 }
 
 function metric(label, value) {
@@ -667,7 +700,7 @@ function renderServerTable(servers, cwd) {
 
 function renderFindingsTable(findings) {
   if (findings.length === 0) {
-    return `<p class="empty">No findings. Keep reviewing new MCP servers and agent tools before adding them.</p>`;
+    return `<p class="empty">No active findings. Keep reviewing new MCP servers and agent tools before adding them.</p>`;
   }
 
   const rows = findings.map((finding) => `<tr>
@@ -676,11 +709,32 @@ function renderFindingsTable(findings) {
     <td>${escapeHtml(finding.serverName)}</td>
     <td>${escapeHtml(finding.title)}</td>
     <td>${codeOrDash(finding.evidence)}</td>
+    <td><code>${escapeHtml(finding.fingerprint)}</code></td>
     <td>${escapeHtml(finding.recommendation)}</td>
   </tr>`).join("");
 
   return `<div class="table-wrap"><table>
-    <thead><tr><th>Severity</th><th>Rule</th><th>Server</th><th>Finding</th><th>Evidence</th><th>Recommendation</th></tr></thead>
+    <thead><tr><th>Severity</th><th>Rule</th><th>Server</th><th>Finding</th><th>Evidence</th><th>Fingerprint</th><th>Recommendation</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table></div>`;
+}
+
+function renderAcceptedFindingsTable(findings) {
+  if (findings.length === 0) {
+    return `<p class="empty">No current findings matched the baseline.</p>`;
+  }
+
+  const rows = findings.map((finding) => `<tr>
+    <td><span class="pill ${escapeHtml(finding.severity)}">${escapeHtml(finding.severity)}</span></td>
+    <td><code>${escapeHtml(finding.id)}</code></td>
+    <td>${escapeHtml(finding.serverName)}</td>
+    <td>${escapeHtml(finding.title)}</td>
+    <td><code>${escapeHtml(finding.fingerprint)}</code></td>
+    <td>${escapeHtml(finding.acceptedReason || "-")}</td>
+  </tr>`).join("");
+
+  return `<div class="table-wrap"><table>
+    <thead><tr><th>Severity</th><th>Rule</th><th>Server</th><th>Finding</th><th>Fingerprint</th><th>Reason</th></tr></thead>
     <tbody>${rows}</tbody>
   </table></div>`;
 }
@@ -714,6 +768,14 @@ function riskCaption(score) {
   if (score >= 50) return "High risk configuration; review before team use.";
   if (score >= 20) return "Moderate risk; confirm the intended permission scope.";
   return "Low risk based on the current rule set.";
+}
+
+function hasBaseline(result) {
+  return Boolean(result.baseline?.enabled);
+}
+
+function hasAcceptedFindings(result) {
+  return (result.acceptedFindings || []).length > 0;
 }
 
 function escapeHtml(value) {

@@ -2,8 +2,10 @@ import os from "node:os";
 import path from "node:path";
 import { extractServers, loadConfigFile } from "./config.js";
 import { discoverConfigFiles } from "./discovery.js";
+import { findingFingerprint } from "./fingerprint.js";
 import { evaluateServer } from "./rules.js";
 import { sortFindings } from "./severity.js";
+import { summarize } from "./baseline.js";
 
 export async function scan({ cwd, env, configPaths = [], includeDefaults = true, toolVersion = "0.0.0" }) {
   const home = env.HOME || env.USERPROFILE || os.homedir();
@@ -64,7 +66,11 @@ export async function scan({ cwd, env, configPaths = [], includeDefaults = true,
     findings.push(...evaluateServer(server, { cwd, home }));
   }
 
-  const sortedFindings = sortFindings(findings);
+  const sortedFindings = sortFindings(findings).map((finding) => ({
+    ...finding,
+    fingerprint: findingFingerprint(finding, cwd),
+    status: "active"
+  }));
   return {
     metadata: {
       generatedAt: new Date().toISOString(),
@@ -75,30 +81,8 @@ export async function scan({ cwd, env, configPaths = [], includeDefaults = true,
     scannedFiles,
     servers,
     findings: sortedFindings,
+    acceptedFindings: [],
     summary: summarize(sortedFindings, servers, scannedFiles)
-  };
-}
-
-function summarize(findings, servers, scannedFiles) {
-  const counts = {
-    critical: 0,
-    high: 0,
-    medium: 0,
-    low: 0
-  };
-
-  for (const finding of findings) {
-    if (counts[finding.severity] != null) {
-      counts[finding.severity] += 1;
-    }
-  }
-
-  return {
-    scannedFileCount: scannedFiles.length,
-    serverCount: servers.length,
-    findingCount: findings.length,
-    counts,
-    riskScore: counts.critical * 20 + counts.high * 10 + counts.medium * 4 + counts.low
   };
 }
 
