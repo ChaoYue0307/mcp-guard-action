@@ -1,13 +1,13 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { generateAuditSummary, writeAuditPack } from "./audit.js";
+import { generateAuditSummary, generateAuditVerificationSummary, verifyAuditPack, writeAuditPack } from "./audit.js";
 import { applyBaseline, loadBaselineFile, writeBaselineFile } from "./baseline.js";
 import { initProject, renderInitSummary } from "./init.js";
 import { scan } from "./scan.js";
 import { generateHtmlReport, generateJsonReport, generateMarkdownReport, generateSarifReport, generateTextReport } from "./report.js";
 import { compareSeverity, severityRank } from "./severity.js";
 
-const VERSION = "0.4.7";
+const VERSION = "0.4.8";
 
 export async function runCli(argv, io) {
   const args = argv.slice(2);
@@ -81,6 +81,25 @@ export async function runCli(argv, io) {
       return 2;
     }
 
+    return 0;
+  }
+
+  if (command === "verify-audit") {
+    if (args.includes("--help") || args.includes("-h")) {
+      io.stdout.write(helpText());
+      return 0;
+    }
+
+    const options = parseVerifyAuditArgs(args.slice(1), io.cwd);
+    const verification = await verifyAuditPack({
+      cwd: options.cwd,
+      manifestPath: options.manifestPath
+    });
+    io.stdout.write(generateAuditVerificationSummary(verification, options.cwd));
+    if (verification.status !== "passed") {
+      process.exitCode = 2;
+      return 2;
+    }
     return 0;
   }
 
@@ -329,6 +348,30 @@ function parseAuditArgs(args, defaultCwd) {
   return options;
 }
 
+function parseVerifyAuditArgs(args, defaultCwd) {
+  const options = {
+    cwd: defaultCwd,
+    manifestPath: ""
+  };
+  let manifestValue = "";
+
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (arg === "--manifest" || arg === "-m") {
+      manifestValue = readValue(args, index, arg);
+      index += 1;
+    } else if (arg === "--cwd") {
+      options.cwd = path.resolve(readValue(args, index, arg));
+      index += 1;
+    } else {
+      throw new Error(`Unknown verify-audit option: ${arg}`);
+    }
+  }
+
+  options.manifestPath = manifestValue ? resolveInputPath(manifestValue, options.cwd) : "";
+  return options;
+}
+
 function readValue(args, index, optionName) {
   const value = args[index + 1];
   if (!value || value.startsWith("--")) {
@@ -370,6 +413,7 @@ Open-source scanner for risky MCP server and AI agent tool configuration.
 Usage:
   mcp-guard scan [options]
   mcp-guard audit [options]
+  mcp-guard verify-audit [options]
   mcp-guard init [options]
   mcp-guard version
   mcp-guard help
@@ -420,11 +464,17 @@ Audit options:
       --no-policy           Do not auto-load .mcp-guard-policy.json.
       --no-defaults         Only scan paths passed with --config.
 
+Verify audit options:
+  -m, --manifest <path>     Audit manifest to verify.
+                            Default: mcp-guard-audit/mcp-guard-audit-manifest.json.
+      --cwd <path>          Working directory for resolving relative artifact paths.
+
 Examples:
   mcp-guard init
   mcp-guard init --write-baseline --upload-sarif
   mcp-guard scan
   mcp-guard audit --config .mcp.json --output-dir mcp-guard-audit
+  mcp-guard verify-audit --manifest mcp-guard-audit/mcp-guard-audit-manifest.json
   mcp-guard audit --config .mcp.json --policy .mcp-guard-policy.json --fail-on high
   mcp-guard scan --format markdown --output mcp-guard-report.md
   mcp-guard scan --format html --output mcp-guard-report.html

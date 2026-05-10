@@ -72,6 +72,76 @@ export async function writeAuditPack({
   };
 }
 
+export async function verifyAuditPack({ cwd, manifestPath = "" }) {
+  const resolvedManifestPath = path.resolve(cwd, manifestPath || path.join("mcp-guard-audit", AUDIT_FILENAMES.manifest));
+  const manifestDir = path.dirname(resolvedManifestPath);
+  const manifest = JSON.parse(await fs.readFile(resolvedManifestPath, "utf8"));
+  const algorithm = manifest.integrity?.algorithm;
+  const artifacts = Array.isArray(manifest.integrity?.artifacts) ? manifest.integrity.artifacts : [];
+  const results = [];
+
+  if (algorithm !== "sha256") {
+    results.push({
+      key: "manifest",
+      path: displayPath(resolvedManifestPath, cwd),
+      status: "failed",
+      reason: `Unsupported or missing integrity algorithm: ${algorithm || "none"}`
+    });
+  }
+
+  if (artifacts.length === 0) {
+    results.push({
+      key: "manifest",
+      path: displayPath(resolvedManifestPath, cwd),
+      status: "failed",
+      reason: "No integrity artifacts found in manifest."
+    });
+  }
+
+  for (const artifact of artifacts) {
+    results.push(await verifyAuditArtifact(artifact, { cwd, manifestDir }));
+  }
+
+  const failedCount = results.filter((result) => result.status !== "passed").length;
+  const checkedCount = artifacts.length;
+  return {
+    manifestPath: resolvedManifestPath,
+    status: failedCount === 0 ? "passed" : "failed",
+    checkedCount,
+    passedCount: results.filter((result) => result.status === "passed").length,
+    failedCount,
+    results
+  };
+}
+
+export function generateAuditVerificationSummary(verification, cwd) {
+  const lines = [];
+  lines.push("mcp-guard audit verification");
+  lines.push(`Manifest: ${displayPath(verification.manifestPath, cwd)}`);
+  lines.push(`Status: ${verification.status}`);
+  lines.push(`Artifacts checked: ${verification.checkedCount}`);
+  lines.push(`Passed: ${verification.passedCount}`);
+  lines.push(`Failed: ${verification.failedCount}`);
+  lines.push("");
+
+  for (const result of verification.results) {
+    lines.push(`- [${result.status === "passed" ? "ok" : "failed"}] ${result.key}: ${result.path}`);
+    if (result.status !== "passed") {
+      lines.push(`  Reason: ${result.reason}`);
+      if (result.expectedSha256 || result.actualSha256) {
+        lines.push(`  Expected sha256: ${result.expectedSha256 || "-"}`);
+        lines.push(`  Actual sha256: ${result.actualSha256 || "-"}`);
+      }
+      if (Number.isInteger(result.expectedBytes) || Number.isInteger(result.actualBytes)) {
+        lines.push(`  Expected bytes: ${result.expectedBytes ?? "-"}`);
+        lines.push(`  Actual bytes: ${result.actualBytes ?? "-"}`);
+      }
+    }
+  }
+
+  return `${lines.join("\n")}\n`;
+}
+
 export function auditFilePaths(outputDir) {
   return Object.fromEntries(
     Object.entries(AUDIT_FILENAMES).map(([key, filename]) => [key, path.join(outputDir, filename)])
@@ -292,6 +362,69 @@ async function auditArtifacts(files, cwd) {
     });
   }
   return artifacts;
+}
+
+async function verifyAuditArtifact(artifact, { cwd, manifestDir }) {
+  if (!artifact?.key || !artifact?.path) {
+    return {
+      key: artifact?.key || "<unknown>",
+      path: artifact?.path || "<missing>",
+      status: "failed",
+      reason: "Artifact entry is missing key or path."
+    };
+  }
+
+  const resolvedPath = await resolveAuditArtifactPath(artifact.path, { cwd, manifestDir });
+  let content;
+  try {
+    content = await fs.readFile(resolvedPath);
+  } catch {
+    return {
+      key: artifact.key,
+      path: artifact.path,
+      resolvedPath: displayPath(resolvedPath, cwd),
+      status: "failed",
+      reason: "Artifact file is missing.",
+      expectedBytes: artifact.bytes,
+      expectedSha256: artifact.sha256
+    };
+  }
+
+  const actualBytes = content.byteLength;
+  const actualSha256 = crypto.createHash("sha256").update(content).digest("hex");
+  const bytesMatch = actualBytes === artifact.bytes;
+  const hashMatch = actualSha256 === artifact.sha256;
+  return {
+    key: artifact.key,
+    path: artifact.path,
+    resolvedPath: displayPath(resolvedPath, cwd),
+    status: bytesMatch && hashMatch ? "passed" : "failed",
+    reason: bytesMatch && hashMatch ? "" : "Artifact content does not match manifest integrity metadata.",
+    expectedBytes: artifact.bytes,
+    actualBytes,
+    expectedSha256: artifact.sha256,
+    actualSha256
+  };
+}
+
+async function resolveAuditArtifactPath(artifactPath, { cwd, manifestDir }) {
+  if (path.isAbsolute(artifactPath)) return artifactPath;
+
+  const candidates = [
+    path.join(manifestDir, path.basename(artifactPath)),
+    path.resolve(cwd, artifactPath)
+  ];
+
+  for (const candidate of candidates) {
+    try {
+      await fs.access(candidate);
+      return candidate;
+    } catch {
+      // Try the next candidate.
+    }
+  }
+
+  return candidates[0];
 }
 
 function decisionGuidance(result) {

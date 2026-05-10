@@ -23,7 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: ChaoYue0307/mcp-guard-action@v0.4.7
+      - uses: ChaoYue0307/mcp-guard-action@v0.4.8
         with:
           config: .mcp.json
           fail-on: high
@@ -42,7 +42,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: ChaoYue0307/mcp-guard-action@v0.4.7
+      - uses: ChaoYue0307/mcp-guard-action@v0.4.8
         with:
           config: .mcp.json
           fail-on: high
@@ -88,7 +88,7 @@ The action generates an audit pack:
 - SARIF 2.1.0 for GitHub code scanning.
 - Remediation Markdown for server-by-server handoff.
 - Remediation checklist for PR and setup tracking.
-- Audit manifest JSON with SHA-256 hashes and byte sizes for downstream automation.
+- Audit manifest JSON with SHA-256 hashes, byte sizes, and `mcp-guard verify-audit` support for downloaded artifacts.
 
 Secret-like values are redacted before reports are written.
 
@@ -103,7 +103,7 @@ mcp-guard scan --config .mcp.json --write-baseline .mcp-guard-baseline.json
 Then enforce only new findings:
 
 ```yaml
-- uses: ChaoYue0307/mcp-guard-action@v0.4.7
+- uses: ChaoYue0307/mcp-guard-action@v0.4.8
   with:
     config: .mcp.json
     baseline: .mcp-guard-baseline.json
@@ -115,7 +115,7 @@ Then enforce only new findings:
 Commit `.mcp-guard-policy.json` or pass `policy` to enforce approved commands, remote packages, directories, and remote MCP URLs.
 
 ```yaml
-- uses: ChaoYue0307/mcp-guard-action@v0.4.7
+- uses: ChaoYue0307/mcp-guard-action@v0.4.8
   with:
     config: .mcp.json
     policy: .mcp-guard-policy.json
