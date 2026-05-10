@@ -84,8 +84,14 @@ Inspect a committed input config, reproduction commands, and generated Markdown,
 
 https://chaoyue0307.github.io/mcp-guard/e2e/
 
+Inspect a live GitHub Action demo pull request that intentionally fails on risky MCP config:
+
+https://github.com/ChaoYue0307/mcp-guard-demo/pull/1
+
 ## Links
 
 - Product site: https://chaoyue0307.github.io/mcp-guard/
+- Marketplace listing: https://github.com/marketplace/actions/mcp-guard-mcp-security-scanner
+- Live demo repository: https://github.com/ChaoYue0307/mcp-guard-demo
 - Main repository: https://github.com/ChaoYue0307/mcp-guard
 - npm package: https://www.npmjs.com/package/agent-mcp-guard
