@@ -63,6 +63,9 @@ outputs:
   remediation-report:
     description: Path to the generated remediation plan.
     value: ${{ steps.reports.outputs.remediation-report }}
+  remediation-checklist:
+    description: Path to the generated remediation checklist.
+    value: ${{ steps.reports.outputs.remediation-checklist }}
   audit-manifest:
     description: Path to the generated audit pack manifest.
     value: ${{ steps.reports.outputs.audit-manifest }}
@@ -114,6 +117,7 @@ runs:
         sarif_report="${MCP_GUARD_OUTPUT_DIR}/mcp-guard.sarif"
         executive_summary="${MCP_GUARD_OUTPUT_DIR}/mcp-guard-executive-summary.md"
         remediation_report="${MCP_GUARD_OUTPUT_DIR}/mcp-guard-remediation.md"
+        remediation_checklist="${MCP_GUARD_OUTPUT_DIR}/mcp-guard-remediation-checklist.md"
         audit_manifest="${MCP_GUARD_OUTPUT_DIR}/mcp-guard-audit-manifest.json"
         comment_report="${MCP_GUARD_OUTPUT_DIR}/mcp-guard-pr-comment.md"
 
@@ -133,6 +137,7 @@ runs:
           "${MCP_GUARD_FAIL_ON}" \
           "${executive_summary}" \
           "${remediation_report}" \
+          "${remediation_checklist}" \
           "${audit_manifest}" > "${comment_report}"
 
         {
@@ -142,6 +147,7 @@ runs:
           echo "json-report=${json_report}"
           echo "sarif-report=${sarif_report}"
           echo "remediation-report=${remediation_report}"
+          echo "remediation-checklist=${remediation_checklist}"
           echo "audit-manifest=${audit_manifest}"
           echo "comment-report=${comment_report}"
           echo "exit-code=${status}"
@@ -161,6 +167,7 @@ runs:
           "${MCP_GUARD_FAIL_ON}" \
           "${{ steps.reports.outputs.executive-summary }}" \
           "${{ steps.reports.outputs.remediation-report }}" \
+          "${{ steps.reports.outputs.remediation-checklist }}" \
           "${{ steps.reports.outputs.audit-manifest }}" >> "${GITHUB_STEP_SUMMARY}"
 
     - name: Comment on pull request

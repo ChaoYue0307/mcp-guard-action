@@ -8,6 +8,7 @@ import { scan } from "./scan.js";
 export const AUDIT_FILENAMES = {
   executiveSummary: "mcp-guard-executive-summary.md",
   remediation: "mcp-guard-remediation.md",
+  remediationChecklist: "mcp-guard-remediation-checklist.md",
   markdownReport: "mcp-guard-report.md",
   htmlReport: "mcp-guard-report.html",
   jsonReport: "mcp-guard-report.json",
@@ -52,6 +53,7 @@ export async function writeAuditPack({
   await Promise.all([
     fs.writeFile(files.executiveSummary, generateExecutiveSummary(result, { failOn }), "utf8"),
     fs.writeFile(files.remediation, generateRemediationPlan(result), "utf8"),
+    fs.writeFile(files.remediationChecklist, generateRemediationChecklist(result), "utf8"),
     fs.writeFile(files.markdownReport, generateMarkdownReport(result), "utf8"),
     fs.writeFile(files.htmlReport, generateHtmlReport(result), "utf8"),
     fs.writeFile(files.jsonReport, `${generateJsonReport(result)}\n`, "utf8"),
@@ -199,6 +201,51 @@ function generateRemediationPlan(result) {
   return `${lines.join("\n")}\n`;
 }
 
+function generateRemediationChecklist(result) {
+  const lines = [];
+  lines.push("# mcp-guard Remediation Checklist");
+  lines.push("");
+  lines.push(`Generated: ${result.metadata.generatedAt}`);
+  lines.push(`Risk score: **${result.summary.riskScore}**`);
+  lines.push(`Active findings: **${result.summary.findingCount}**`);
+  lines.push("");
+  lines.push("## Release Gate");
+  lines.push("");
+  lines.push("- [ ] Critical findings are removed or the MCP server is redesigned.");
+  lines.push("- [ ] High findings are reviewed before merge or rollout.");
+  lines.push("- [ ] Any accepted residual risk is documented in policy or baseline.");
+  lines.push("");
+  lines.push("## Remediation Tasks");
+  lines.push("");
+  if (result.findings.length === 0) {
+    lines.push("No active remediation tasks.");
+  } else {
+    lines.push("| Done | Priority | Rule | Server | Action | Fingerprint |");
+    lines.push("| --- | --- | --- | --- | --- | --- |");
+    for (const finding of result.findings) {
+      lines.push(`| [ ] | ${cell(finding.severity)} | ${cell(finding.id)} | ${cell(finding.serverName)} | ${cell(remediationAction(finding))} | ${cell(finding.fingerprint)} |`);
+    }
+  }
+  lines.push("");
+  if (result.acceptedFindings?.length > 0) {
+    lines.push("## Accepted Risk Review");
+    lines.push("");
+    lines.push("| Reviewed | Rule | Server | Reason | Fingerprint |");
+    lines.push("| --- | --- | --- | --- | --- |");
+    for (const finding of result.acceptedFindings) {
+      lines.push(`| [ ] | ${cell(finding.id)} | ${cell(finding.serverName)} | ${cell(finding.acceptedReason || "-")} | ${cell(finding.fingerprint)} |`);
+    }
+    lines.push("");
+  }
+  lines.push("## Closeout");
+  lines.push("");
+  lines.push("- [ ] Re-run `mcp-guard audit` after changes.");
+  lines.push("- [ ] Commit updated `.mcp-guard-policy.json` only for reviewed approvals.");
+  lines.push("- [ ] Commit or update `.mcp-guard-baseline.json` only for intentionally accepted findings.");
+  lines.push("");
+  return `${lines.join("\n")}\n`;
+}
+
 function buildAuditManifest(result, files, { cwd, outputDir, failOn }) {
   return {
     version: 1,
@@ -273,6 +320,38 @@ function remediationPriorities(findings) {
   return items.length > 0 ? items : ["Review each active finding and document the accepted remediation path."];
 }
 
+function remediationAction(finding) {
+  const server = finding.serverName === "<workspace>" || finding.serverName === "<config>"
+    ? "this config"
+    : `server \`${finding.serverName}\``;
+
+  if (finding.id === "MCP010") {
+    return `Replace the shell wrapper for ${server} with a direct reviewed executable or checked-in script.`;
+  }
+  if (finding.id === "MCP011") {
+    return `Move inline eval code for ${server} into reviewed source control.`;
+  }
+  if (finding.id === "MCP020" || finding.id === "MCP021" || finding.id === "MCP071") {
+    return `Pin and approve the remote package used by ${server}.`;
+  }
+  if (finding.id === "MCP030" || finding.id === "MCP061") {
+    return `Move credentials for ${server} out of MCP config and rotate any exposed tokens.`;
+  }
+  if (finding.id === "MCP040" || finding.id === "MCP041" || finding.id === "MCP072" || finding.id === "MCP073") {
+    return `Constrain filesystem access for ${server} to a reviewed project directory.`;
+  }
+  if (finding.id === "MCP050") {
+    return `Remove the dangerous startup operation from ${server} and run setup manually after review.`;
+  }
+  if (finding.id === "MCP060" || finding.id === "MCP074") {
+    return `Review and allowlist the remote MCP endpoint used by ${server}.`;
+  }
+  if (finding.id === "MCP070") {
+    return `Use an approved command for ${server} or update policy after review.`;
+  }
+  return finding.recommendation;
+}
+
 function groupFindingsByServer(findings) {
   const groups = new Map();
   for (const finding of findings) {
@@ -287,6 +366,7 @@ function auditFileLabels(files) {
   return [
     ["Executive summary", files.executiveSummary],
     ["Remediation plan", files.remediation],
+    ["Remediation checklist", files.remediationChecklist],
     ["Markdown report", files.markdownReport],
     ["HTML report", files.htmlReport],
     ["JSON report", files.jsonReport],

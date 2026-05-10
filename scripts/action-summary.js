@@ -3,10 +3,17 @@
 import fs from "node:fs";
 import path from "node:path";
 
-const [jsonReportPath, markdownReportPath, htmlReportPath, sarifReportPath, failOn, executiveSummaryPath, remediationReportPath, auditManifestPath] = process.argv.slice(2);
+const [jsonReportPath, markdownReportPath, htmlReportPath, sarifReportPath, failOn, executiveSummaryPath, remediationReportPath, maybeRemediationChecklistPath, maybeAuditManifestPath] = process.argv.slice(2);
+let remediationChecklistPath = maybeRemediationChecklistPath;
+let auditManifestPath = maybeAuditManifestPath;
+
+if (!auditManifestPath && remediationChecklistPath && path.basename(remediationChecklistPath) === "mcp-guard-audit-manifest.json") {
+  auditManifestPath = remediationChecklistPath;
+  remediationChecklistPath = "";
+}
 
 if (!jsonReportPath) {
-  process.stderr.write("Usage: action-summary.js <json-report> <markdown-report> <html-report> <sarif-report> <fail-on> [executive-summary] [remediation-report] [audit-manifest]\n");
+  process.stderr.write("Usage: action-summary.js <json-report> <markdown-report> <html-report> <sarif-report> <fail-on> [executive-summary] [remediation-report] [remediation-checklist] [audit-manifest]\n");
   process.exit(1);
 }
 
@@ -51,6 +58,15 @@ if (topFindings.length === 0) {
   }
 }
 
+if (topFindings.length > 0) {
+  lines.push("");
+  lines.push("### First remediation steps");
+  lines.push("");
+  for (const finding of topFindings.slice(0, 5)) {
+    lines.push(`- [ ] **${cell(finding.severity)} ${cell(finding.id)}** \`${cell(finding.serverName)}\`: ${cell(finding.recommendation)}`);
+  }
+}
+
 lines.push("");
 lines.push("### Reports");
 lines.push("");
@@ -63,6 +79,9 @@ if (executiveSummaryPath) {
 }
 if (remediationReportPath) {
   lines.push(`- Remediation: \`${relative(remediationReportPath)}\``);
+}
+if (remediationChecklistPath) {
+  lines.push(`- Remediation checklist: \`${relative(remediationChecklistPath)}\``);
 }
 if (auditManifestPath) {
   lines.push(`- Audit manifest: \`${relative(auditManifestPath)}\``);

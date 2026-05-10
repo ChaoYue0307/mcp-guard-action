@@ -23,7 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: ChaoYue0307/mcp-guard-action@v0.4.5
+      - uses: ChaoYue0307/mcp-guard-action@v0.4.6
         with:
           config: .mcp.json
           fail-on: high
@@ -42,7 +42,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: ChaoYue0307/mcp-guard-action@v0.4.5
+      - uses: ChaoYue0307/mcp-guard-action@v0.4.6
         with:
           config: .mcp.json
           fail-on: high
@@ -73,6 +73,7 @@ jobs:
 | `json-report` | Path to the generated JSON report. |
 | `sarif-report` | Path to the generated SARIF report. |
 | `remediation-report` | Path to the generated remediation plan. |
+| `remediation-checklist` | Path to the generated remediation checklist. |
 | `audit-manifest` | Path to the generated audit pack manifest. |
 | `comment-report` | Path to the generated pull request comment body. |
 | `exit-code` | `0` when below threshold, `2` when findings met the threshold. |
@@ -86,6 +87,7 @@ The action generates an audit pack:
 - JSON for automation.
 - SARIF 2.1.0 for GitHub code scanning.
 - Remediation Markdown for server-by-server handoff.
+- Remediation checklist for PR and setup tracking.
 - Audit manifest JSON for downstream automation.
 
 Secret-like values are redacted before reports are written.
@@ -101,7 +103,7 @@ mcp-guard scan --config .mcp.json --write-baseline .mcp-guard-baseline.json
 Then enforce only new findings:
 
 ```yaml
-- uses: ChaoYue0307/mcp-guard-action@v0.4.5
+- uses: ChaoYue0307/mcp-guard-action@v0.4.6
   with:
     config: .mcp.json
     baseline: .mcp-guard-baseline.json
@@ -113,7 +115,7 @@ Then enforce only new findings:
 Commit `.mcp-guard-policy.json` or pass `policy` to enforce approved commands, remote packages, directories, and remote MCP URLs.
 
 ```yaml
-- uses: ChaoYue0307/mcp-guard-action@v0.4.5
+- uses: ChaoYue0307/mcp-guard-action@v0.4.6
   with:
     config: .mcp.json
     policy: .mcp-guard-policy.json
