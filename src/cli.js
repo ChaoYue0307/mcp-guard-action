@@ -1,11 +1,12 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { applyBaseline, loadBaselineFile, writeBaselineFile } from "./baseline.js";
+import { initProject, renderInitSummary } from "./init.js";
 import { scan } from "./scan.js";
 import { generateHtmlReport, generateJsonReport, generateMarkdownReport, generateSarifReport, generateTextReport } from "./report.js";
 import { compareSeverity, severityRank } from "./severity.js";
 
-const VERSION = "0.4.1";
+const VERSION = "0.4.2";
 
 export async function runCli(argv, io) {
   const args = argv.slice(2);
@@ -18,6 +19,34 @@ export async function runCli(argv, io) {
 
   if (command === "version" || command === "--version" || command === "-v") {
     io.stdout.write(`${VERSION}\n`);
+    return 0;
+  }
+
+  if (command === "init") {
+    if (args.includes("--help") || args.includes("-h")) {
+      io.stdout.write(helpText());
+      return 0;
+    }
+
+    const options = parseInitArgs(args.slice(1), io.cwd);
+    const result = await initProject({
+      cwd: options.cwd,
+      env: io.env,
+      configPaths: options.configPaths,
+      includeDefaults: options.includeDefaults,
+      workflowPath: options.workflowPath,
+      baselinePath: options.baselinePath,
+      failOn: options.failOn,
+      commentPr: options.commentPr,
+      uploadSarif: options.uploadSarif,
+      writeBaseline: options.writeBaseline,
+      useBaseline: options.useBaseline,
+      baselineReason: options.baselineReason,
+      force: options.force,
+      dryRun: options.dryRun,
+      toolVersion: VERSION
+    });
+    io.stdout.write(renderInitSummary(result, options.cwd));
     return 0;
   }
 
@@ -68,6 +97,82 @@ export async function runCli(argv, io) {
   }
 
   return 0;
+}
+
+function parseInitArgs(args, defaultCwd) {
+  const options = {
+    cwd: defaultCwd,
+    configPaths: [],
+    includeDefaults: true,
+    workflowPath: "",
+    baselinePath: "",
+    failOn: "high",
+    commentPr: true,
+    uploadSarif: false,
+    writeBaseline: false,
+    useBaseline: false,
+    baselineReason: "Accepted current MCP findings",
+    force: false,
+    dryRun: false
+  };
+  options.workflowPath = path.join(options.cwd, ".github", "workflows", "mcp-guard.yml");
+  options.baselinePath = path.join(options.cwd, ".mcp-guard-baseline.json");
+  let workflowPathProvided = false;
+  let baselinePathProvided = false;
+
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (arg === "--config" || arg === "-c") {
+      options.configPaths.push(resolveInputPath(readValue(args, index, arg), options.cwd));
+      index += 1;
+    } else if (arg === "--workflow") {
+      options.workflowPath = resolveInputPath(readValue(args, index, arg), options.cwd);
+      workflowPathProvided = true;
+      index += 1;
+    } else if (arg === "--baseline" || arg === "--allowlist") {
+      options.baselinePath = resolveInputPath(readValue(args, index, arg), options.cwd);
+      options.useBaseline = true;
+      baselinePathProvided = true;
+      index += 1;
+    } else if (arg === "--write-baseline" || arg === "--write-allowlist") {
+      options.writeBaseline = true;
+      options.useBaseline = true;
+    } else if (arg === "--baseline-reason") {
+      options.baselineReason = readValue(args, index, arg);
+      index += 1;
+    } else if (arg === "--fail-on") {
+      options.failOn = readValue(args, index, arg);
+      index += 1;
+      if (!["critical", "high", "medium", "low", "none"].includes(options.failOn)) {
+        throw new Error("--fail-on must be one of: critical, high, medium, low, none");
+      }
+    } else if (arg === "--comment-pr") {
+      options.commentPr = true;
+    } else if (arg === "--no-comment-pr") {
+      options.commentPr = false;
+    } else if (arg === "--upload-sarif") {
+      options.uploadSarif = true;
+    } else if (arg === "--cwd") {
+      options.cwd = path.resolve(readValue(args, index, arg));
+      if (!workflowPathProvided) {
+        options.workflowPath = path.join(options.cwd, ".github", "workflows", "mcp-guard.yml");
+      }
+      if (!baselinePathProvided) {
+        options.baselinePath = path.join(options.cwd, ".mcp-guard-baseline.json");
+      }
+      index += 1;
+    } else if (arg === "--no-defaults") {
+      options.includeDefaults = false;
+    } else if (arg === "--force") {
+      options.force = true;
+    } else if (arg === "--dry-run") {
+      options.dryRun = true;
+    } else {
+      throw new Error(`Unknown init option: ${arg}`);
+    }
+  }
+
+  return options;
 }
 
 function parseScanArgs(args, defaultCwd) {
@@ -165,8 +270,25 @@ Open-source scanner for risky MCP server and AI agent tool configuration.
 
 Usage:
   mcp-guard scan [options]
+  mcp-guard init [options]
   mcp-guard version
   mcp-guard help
+
+Init options:
+      --workflow <path>     Workflow path to create. Default: .github/workflows/mcp-guard.yml.
+  -c, --config <path>       MCP config path to reference in the workflow. Can be repeated for baseline generation.
+      --fail-on <severity>  Workflow fail threshold. Default: high.
+      --baseline <path>     Reference an existing baseline JSON file in the workflow.
+      --write-baseline      Generate a baseline from current findings and reference it in the workflow.
+      --baseline-reason <text>
+                            Reason stored for newly written baseline entries.
+      --comment-pr          Enable pull request comments. Default.
+      --no-comment-pr       Do not add pull request comment permission or input.
+      --upload-sarif        Upload SARIF to GitHub code scanning.
+      --cwd <path>          Project directory to initialize.
+      --no-defaults         Only scan paths passed with --config for baseline generation.
+      --force               Overwrite existing workflow or baseline files.
+      --dry-run             Print planned files without writing them.
 
 Scan options:
   -c, --config <path>       Scan a specific MCP config file. Can be repeated.
@@ -183,6 +305,8 @@ Scan options:
       --no-defaults         Only scan paths passed with --config.
 
 Examples:
+  mcp-guard init
+  mcp-guard init --write-baseline --upload-sarif
   mcp-guard scan
   mcp-guard scan --format markdown --output mcp-guard-report.md
   mcp-guard scan --format html --output mcp-guard-report.html

@@ -22,8 +22,8 @@ jobs:
   scan:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: ChaoYue0307/mcp-guard-action@v0.4.1
+      - uses: actions/checkout@v6
+      - uses: ChaoYue0307/mcp-guard-action@v0.4.2
         with:
           config: .mcp.json
           fail-on: high
@@ -41,8 +41,8 @@ jobs:
   scan:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: ChaoYue0307/mcp-guard-action@v0.4.1
+      - uses: actions/checkout@v6
+      - uses: ChaoYue0307/mcp-guard-action@v0.4.2
         with:
           config: .mcp.json
           fail-on: high
@@ -95,7 +95,7 @@ mcp-guard scan --config .mcp.json --write-baseline .mcp-guard-baseline.json
 Then enforce only new findings:
 
 ```yaml
-- uses: ChaoYue0307/mcp-guard-action@v0.4.1
+- uses: ChaoYue0307/mcp-guard-action@v0.4.2
   with:
     config: .mcp.json
     baseline: .mcp-guard-baseline.json
