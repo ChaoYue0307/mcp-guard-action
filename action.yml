@@ -20,7 +20,7 @@ inputs:
     required: false
     default: ""
   comment-pr:
-    description: Post or update a pull request comment with the scan summary. Requires pull-requests: write permission.
+    description: "Post or update a pull request comment with the scan summary. Requires pull-requests: write permission."
     required: false
     default: "false"
   output-dir:
