@@ -109,11 +109,11 @@ export function generateMarkdownReport(result) {
   if (result.servers.length === 0) {
     lines.push("- No MCP servers found.");
   } else {
-    lines.push("| Server | Command | Args | CWD | URL | Env |");
-    lines.push("| --- | --- | --- | --- | --- | --- |");
+    lines.push("| Server | Command | Args | CWD | URL | Env file | Env |");
+    lines.push("| --- | --- | --- | --- | --- | --- | --- |");
     for (const server of result.servers) {
       const env = Object.entries(redactEnv(server.env)).map(([key, value]) => `${key}=${value}`).join("<br>");
-      lines.push(`| ${cell(server.name)} | ${cell(server.command || "-")} | ${cell(server.args.join(" ") || "-")} | ${cell(server.cwd || "-")} | ${cell(server.url || "-")} | ${cell(env || "-")} |`);
+      lines.push(`| ${cell(server.name)} | ${cell(server.command || "-")} | ${cell(server.args.join(" ") || "-")} | ${cell(server.cwd || "-")} | ${cell(server.url || "-")} | ${cell(server.envFile || "-")} | ${cell(env || "-")} |`);
     }
   }
   lines.push("");
@@ -151,7 +151,6 @@ export function generateMarkdownReport(result) {
   lines.push("- This report is an assistive security review, not a guarantee that all issues were found.");
   lines.push("- Secret-like values are redacted by default.");
   lines.push("- Review each MCP server before granting access to files, shells, SaaS accounts, or production systems.");
-  lines.push("");
 
   return `${lines.join("\n")}\n`;
 }
@@ -585,6 +584,7 @@ function sanitizeResult(result) {
       command: server.command,
       args: server.args,
       env: redactEnv(server.env),
+      envFile: server.envFile,
       cwd: server.cwd,
       url: server.url,
       headers: redactEnv(server.headers)
@@ -727,13 +727,14 @@ function renderServerTable(servers, cwd) {
       <td>${codeOrDash(server.args.join(" "))}</td>
       <td>${codeOrDash(server.cwd)}</td>
       <td>${codeOrDash(server.url)}</td>
+      <td>${codeOrDash(server.envFile)}</td>
       <td>${env || "-"}</td>
       <td>${headers || "-"}</td>
     </tr>`;
   }).join("");
 
   return `<div class="table-wrap"><table>
-    <thead><tr><th>Server</th><th>Command</th><th>Args</th><th>CWD</th><th>URL</th><th>Env</th><th>Headers</th></tr></thead>
+    <thead><tr><th>Server</th><th>Command</th><th>Args</th><th>CWD</th><th>URL</th><th>Env file</th><th>Env</th><th>Headers</th></tr></thead>
     <tbody>${rows}</tbody>
   </table></div>`;
 }

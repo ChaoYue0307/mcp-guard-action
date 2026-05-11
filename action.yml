@@ -43,6 +43,22 @@ inputs:
     description: Artifact name for generated reports.
     required: false
     default: mcp-guard-report
+  license-endpoint:
+    description: Optional Pro license verification endpoint. Leave empty to skip license verification.
+    required: false
+    default: ""
+  license-key:
+    description: Optional Pro license key. Pass from a GitHub Secret.
+    required: false
+    default: ""
+  license-email:
+    description: Optional buyer email for Pro license verification.
+    required: false
+    default: ""
+  license-product:
+    description: Product id for Pro license verification.
+    required: false
+    default: pro-monthly
 
 outputs:
   executive-summary:
@@ -94,11 +110,19 @@ runs:
         MCP_GUARD_POLICY: ${{ inputs.policy }}
         MCP_GUARD_FAIL_ON: ${{ inputs.fail-on }}
         MCP_GUARD_OUTPUT_DIR: ${{ inputs.output-dir }}
+        MCP_GUARD_LICENSE_ENDPOINT: ${{ inputs.license-endpoint }}
+        MCP_GUARD_LICENSE_KEY: ${{ inputs.license-key }}
+        MCP_GUARD_LICENSE_EMAIL: ${{ inputs.license-email }}
+        MCP_GUARD_LICENSE_PRODUCT: ${{ inputs.license-product }}
       run: |
         set -euo pipefail
 
         guard_bin="${GITHUB_ACTION_PATH}/bin/mcp-guard.js"
         mkdir -p "${MCP_GUARD_OUTPUT_DIR}"
+
+        if [ -n "${MCP_GUARD_LICENSE_ENDPOINT}${MCP_GUARD_LICENSE_KEY}${MCP_GUARD_LICENSE_EMAIL}" ]; then
+          node "${guard_bin}" license verify
+        fi
 
         scan_args=()
         if [ -n "${MCP_GUARD_CONFIG}" ]; then

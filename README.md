@@ -4,6 +4,8 @@ Scan MCP and AI agent tool configuration in GitHub Actions before risky tools me
 
 `mcp-guard` finds risky shell startup commands, leaked secret-like values, broad filesystem access, remote MCP endpoints, dangerous command patterns, and unpinned remote package runners.
 
+Paid private repositories can optionally verify a Pro license before scanning by passing the license key from GitHub Secrets.
+
 ## Usage
 
 ```yaml
@@ -23,7 +25,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: ChaoYue0307/mcp-guard-action@v0.4.9
+      - uses: ChaoYue0307/mcp-guard-action@v0.4.10
         with:
           config: .mcp.json
           fail-on: high
@@ -42,7 +44,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: ChaoYue0307/mcp-guard-action@v0.4.9
+      - uses: ChaoYue0307/mcp-guard-action@v0.4.10
         with:
           config: .mcp.json
           fail-on: high
@@ -62,6 +64,10 @@ jobs:
 | `upload-artifact` | `true` | Uploads generated reports as a workflow artifact. |
 | `upload-sarif` | `false` | Uploads SARIF to GitHub code scanning. Requires `security-events: write`. |
 | `artifact-name` | `mcp-guard-report` | Name of the uploaded artifact. |
+| `license-endpoint` | empty | Optional Pro license verification endpoint. |
+| `license-key` | empty | Optional Pro license key. Pass from a GitHub Secret. |
+| `license-email` | empty | Optional buyer email for Pro license verification. |
+| `license-product` | `pro-monthly` | Product id sent to the license endpoint. |
 
 ## Outputs
 
@@ -103,7 +109,7 @@ mcp-guard scan --config .mcp.json --write-baseline .mcp-guard-baseline.json
 Then enforce only new findings:
 
 ```yaml
-- uses: ChaoYue0307/mcp-guard-action@v0.4.9
+- uses: ChaoYue0307/mcp-guard-action@v0.4.10
   with:
     config: .mcp.json
     baseline: .mcp-guard-baseline.json
@@ -115,12 +121,25 @@ Then enforce only new findings:
 Commit `.mcp-guard-policy.json` or pass `policy` to enforce approved commands, remote packages, directories, and remote MCP URLs.
 
 ```yaml
-- uses: ChaoYue0307/mcp-guard-action@v0.4.9
+- uses: ChaoYue0307/mcp-guard-action@v0.4.10
   with:
     config: .mcp.json
     policy: .mcp-guard-policy.json
     fail-on: high
 ```
+
+## Pro License Gate
+
+```yaml
+- uses: ChaoYue0307/mcp-guard-action@v0.4.10
+  with:
+    config: .mcp.json
+    license-endpoint: https://YOUR_WORKER_URL/license/verify
+    license-key: ${{ secrets.MCP_GUARD_LICENSE_KEY }}
+    license-email: buyer@example.com
+```
+
+The raw license key is sent only to the configured verification endpoint and is not printed in action logs.
 
 ## Transparent Example
 

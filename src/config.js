@@ -27,6 +27,7 @@ function normalizeServer(name, raw, configPath) {
     command: normalizeString(server.command),
     args: normalizeArgs(server.args),
     env: normalizeEnv(server.env),
+    envFile: normalizeString(server.envFile),
     cwd: normalizeString(server.cwd),
     url: normalizeString(server.url),
     headers: normalizeEnv(server.headers),
@@ -57,4 +58,3 @@ function normalizeEnv(value) {
     Object.entries(value).map(([key, item]) => [key, item == null ? "" : String(item)])
   );
 }
-

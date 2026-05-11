@@ -469,6 +469,9 @@ function remediationPriorities(findings) {
   if (ids.has("MCP040") || ids.has("MCP041") || ids.has("MCP072") || ids.has("MCP073")) {
     items.push("Constrain working directories and filesystem arguments to dedicated project workspaces.");
   }
+  if (ids.has("MCP080") || ids.has("MCP081") || ids.has("MCP082") || ids.has("MCP083")) {
+    items.push("Remove high-risk container runtime settings such as privileged mode, Docker socket mounts, host networking, and broad host bind mounts.");
+  }
   if (ids.has("MCP060") || ids.has("MCP074")) {
     items.push("Review remote MCP endpoints and keep an explicit allowlist for approved providers.");
   }
@@ -497,6 +500,18 @@ function remediationAction(finding) {
   }
   if (finding.id === "MCP050") {
     return `Remove the dangerous startup operation from ${server} and run setup manually after review.`;
+  }
+  if (finding.id === "MCP080") {
+    return `Remove privileged container mode from ${server} and grant only the specific runtime capability required.`;
+  }
+  if (finding.id === "MCP081") {
+    return `Remove the Docker socket mount from ${server} or replace it with a narrow broker API.`;
+  }
+  if (finding.id === "MCP082") {
+    return `Move ${server} off host networking and expose only required ports on a dedicated bridge network.`;
+  }
+  if (finding.id === "MCP083") {
+    return `Replace broad host bind mounts for ${server} with a narrow project directory, preferably read-only.`;
   }
   if (finding.id === "MCP060" || finding.id === "MCP074") {
     return `Review and allowlist the remote MCP endpoint used by ${server}.`;

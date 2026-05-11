@@ -3,7 +3,7 @@ export const RULE_CATALOG = [
     id: "MCP000",
     severity: "low",
     title: "No MCP config files found",
-    detects: "No MCP config files were found in common project or user locations.",
+    detects: "No MCP config files were found in common project, Cursor, VS Code, or Claude Desktop locations.",
     recommendation: "Pass --config when the MCP config lives outside default discovery paths."
   },
   {
@@ -45,7 +45,7 @@ export const RULE_CATALOG = [
     id: "MCP020",
     severity: "medium",
     title: "Remote package runner is used",
-    detects: "Remote package runners such as npx, uvx, bunx, pipx, or package-manager dlx commands.",
+    detects: "Remote package runners such as npx, uvx, bunx, pipx run, npm exec, or package-manager dlx commands.",
     recommendation: "Pin the package version and prefer a reviewed lockfile or vendored executable for sensitive tools."
   },
   {
@@ -61,6 +61,13 @@ export const RULE_CATALOG = [
     title: "Secret-like environment variable is exposed",
     detects: "Secret-like environment variable names or values passed into an MCP server.",
     recommendation: "Use least-privilege, short-lived credentials and dedicated service accounts."
+  },
+  {
+    id: "MCP031",
+    severity: "medium",
+    title: "Environment file is loaded into MCP server",
+    detects: "An MCP server uses envFile to load environment variables from a file.",
+    recommendation: "Review the env file before enabling this server and keep credentials least-privileged, scoped, and rotated."
   },
   {
     id: "MCP040",
@@ -96,6 +103,41 @@ export const RULE_CATALOG = [
     title: "Secret-like header is configured",
     detects: "Secret-like remote MCP headers such as authorization or API key headers.",
     recommendation: "Use scoped, short-lived credentials and avoid long-lived secrets in MCP config files."
+  },
+  {
+    id: "MCP062",
+    severity: "high",
+    title: "Remote MCP server uses plaintext HTTP",
+    detects: "A remote MCP server URL starts with http:// instead of https://.",
+    recommendation: "Use an HTTPS MCP endpoint, or tunnel this connection through a trusted encrypted channel."
+  },
+  {
+    id: "MCP080",
+    severity: "critical",
+    title: "Container MCP server runs in privileged mode",
+    detects: "Docker or Podman MCP server startup arguments include privileged container mode.",
+    recommendation: "Remove privileged mode and grant only the specific capabilities, devices, and filesystem paths the MCP server needs."
+  },
+  {
+    id: "MCP081",
+    severity: "critical",
+    title: "Container MCP server mounts the Docker socket",
+    detects: "Docker or Podman volume or bind-mount arguments expose /var/run/docker.sock or /run/docker.sock to the MCP server.",
+    recommendation: "Do not mount the Docker socket into an MCP server. Use a narrowly scoped broker or dedicated API with least-privilege authorization."
+  },
+  {
+    id: "MCP082",
+    severity: "high",
+    title: "Container MCP server uses host networking",
+    detects: "Docker or Podman MCP server startup arguments use host networking.",
+    recommendation: "Use a dedicated bridge network and expose only the ports required by the MCP server."
+  },
+  {
+    id: "MCP083",
+    severity: "medium/high",
+    title: "Container volume grants broad host filesystem access",
+    detects: "Docker or Podman volume or bind-mount arguments expose root, home, or broad user folders to the MCP server.",
+    recommendation: "Mount a narrow project directory as read-only where possible, instead of root, home, or broad user folders."
   },
   {
     id: "MCP070",

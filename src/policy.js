@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { packageIdentity } from "./package-runner.js";
 
 export const DEFAULT_POLICY_FILE = ".mcp-guard-policy.json";
 
@@ -67,15 +68,6 @@ function stringArray(value, fieldName) {
     throw new Error(`${fieldName} must be an array of non-empty strings.`);
   }
   return value.map((item) => item.trim());
-}
-
-function packageIdentity(packageName) {
-  if (packageName.startsWith("@")) {
-    const secondAt = packageName.indexOf("@", 1);
-    return secondAt > 1 ? packageName.slice(0, secondAt) : packageName;
-  }
-  const at = packageName.lastIndexOf("@");
-  return at > 0 ? packageName.slice(0, at) : packageName;
 }
 
 function normalizePolicyPath(value, context) {

@@ -27,7 +27,7 @@ export async function scan({ cwd, env, configPaths = [], includeDefaults = true,
       title: "No MCP config files found",
       serverName: "<workspace>",
       configPath: cwd,
-      evidence: "mcp-guard checked common Claude Desktop, Cursor, and project config paths.",
+      evidence: "mcp-guard checked common Claude Desktop, Cursor, VS Code, and project config paths.",
       recommendation: "Pass --config path/to/mcp.json if your configuration lives elsewhere."
     });
   }
