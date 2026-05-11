@@ -25,7 +25,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: ChaoYue0307/mcp-guard-action@v0.4.10
+      - uses: ChaoYue0307/mcp-guard-action@v0.4.11
         with:
           config: .mcp.json
           fail-on: high
@@ -44,7 +44,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: ChaoYue0307/mcp-guard-action@v0.4.10
+      - uses: ChaoYue0307/mcp-guard-action@v0.4.11
         with:
           config: .mcp.json
           fail-on: high
@@ -109,7 +109,7 @@ mcp-guard scan --config .mcp.json --write-baseline .mcp-guard-baseline.json
 Then enforce only new findings:
 
 ```yaml
-- uses: ChaoYue0307/mcp-guard-action@v0.4.10
+- uses: ChaoYue0307/mcp-guard-action@v0.4.11
   with:
     config: .mcp.json
     baseline: .mcp-guard-baseline.json
@@ -121,7 +121,7 @@ Then enforce only new findings:
 Commit `.mcp-guard-policy.json` or pass `policy` to enforce approved commands, remote packages, directories, and remote MCP URLs.
 
 ```yaml
-- uses: ChaoYue0307/mcp-guard-action@v0.4.10
+- uses: ChaoYue0307/mcp-guard-action@v0.4.11
   with:
     config: .mcp.json
     policy: .mcp-guard-policy.json
@@ -131,7 +131,7 @@ Commit `.mcp-guard-policy.json` or pass `policy` to enforce approved commands, r
 ## Pro License Gate
 
 ```yaml
-- uses: ChaoYue0307/mcp-guard-action@v0.4.10
+- uses: ChaoYue0307/mcp-guard-action@v0.4.11
   with:
     config: .mcp.json
     license-endpoint: https://YOUR_WORKER_URL/license/verify

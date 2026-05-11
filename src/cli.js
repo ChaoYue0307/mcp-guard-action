@@ -11,7 +11,7 @@ import { generateHtmlReport, generateJsonReport, generateMarkdownReport, generat
 import { generateRulesJson, generateRulesMarkdown, generateRulesText } from "./rule-catalog.js";
 import { compareSeverity, severityRank } from "./severity.js";
 
-const VERSION = "0.4.10";
+const VERSION = "0.4.11";
 
 export async function runCli(argv, io) {
   const args = argv.slice(2);
